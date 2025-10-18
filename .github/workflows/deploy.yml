@@ -1,0 +1,55 @@
+name: Deploy Participant App to Production
+
+on:
+  push:
+    branches:
+      - master
+    tags:
+      - 'v*'
+
+jobs:
+  deploy:
+    name: Build and Deploy
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build application
+        run: npm run build
+        env:
+          NODE_ENV: production
+
+      - name: Deploy to Server
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.SERVER_IP }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          source: ".output/*"
+          target: "/www/wwwroot/assessment.vakamaka.com/"
+          strip_components: 0
+          overwrite: true
+
+      - name: Restart PM2 Application
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.SERVER_IP }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: |
+            echo "🚀 Restarting Participant App..."
+            cd /www/wwwroot/assessment.vakamaka.com
+            pm2 restart oa-participant-beta || pm2 start .output/server/index.mjs --name oa-participant-beta -- --port 3001
+            pm2 save
+            echo "✅ Participant App deployment completed!"
