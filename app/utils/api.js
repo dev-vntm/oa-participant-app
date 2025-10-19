@@ -1,8 +1,8 @@
 // API servis sınıfı - Participant App için
 import { useParticipantAssessmentStore } from '~/stores/assessment'
 
-// API Endpoint'inin kök URL'si (Fallback) - /api prefix'siz
-const API_BASE_URL = process.env.API_BASE_URL || 'https://api1.vakamaka.com'
+// API Endpoint'inin kök URL'si (Fallback - development için) - /api prefix'siz
+const API_BASE_URL = process.env.API_BASE_URL || 'https://api-dev.vakamaka.com'
 
 /**
  * API isteklerini yönetecek sınıf
