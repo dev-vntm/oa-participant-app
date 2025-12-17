@@ -1,0 +1,42 @@
+/* ===== GLOBAL TEXT WRAPPING FIX ===== */
+
+/* 
+  Problem: word-break: break-word deprecated ve kelimeleri ortasından bölüyor
+  Çözüm: word-break: normal + overflow-wrap: break-word
+  
+  Bu ayarlar:
+  - Normal kelimeleri boşluklardan böler
+  - Çok uzun kelimeler satıra sığmazsa tamamını alta indirir
+  - Türkçe metinlerde doğal görünüm sağlar
+*/
+
+* {
+  /* Kelimeleri boşluklardan böl, ortasından ASLA */
+  word-break: normal !important;
+  
+  /* Uzun kelimeler satıra sığmazsa tamamını alta indir */
+  overflow-wrap: break-word;
+  word-wrap: break-word;
+  
+  /* Tire ile bölme YOK */
+  hyphens: none;
+  -webkit-hyphens: none;
+  -moz-hyphens: none;
+}
+
+/* Özel durumlar için */
+code,
+pre,
+.no-wrap {
+  word-break: normal !important;
+  overflow-wrap: normal;
+  word-wrap: normal;
+}
+
+/* Tablolar için */
+table,
+table td,
+table th {
+  word-break: normal !important;
+  overflow-wrap: break-word;
+}

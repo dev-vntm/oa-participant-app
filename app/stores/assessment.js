@@ -47,7 +47,11 @@ export const useParticipantAssessmentStore = defineStore('participantAssessment'
     
     // 2FA
     tokenVerified: false,
-    codeVerificationPending: false
+    codeVerificationPending: false,
+    
+    // Policies
+    legalPolicies: [],
+    policiesAcceptedAt: null // KVKK onay tarihi
   }),
 
   getters: {
@@ -291,13 +295,21 @@ export const useParticipantAssessmentStore = defineStore('participantAssessment'
           this.projectUUID = response.data.project.project_uuid // Alias
           this.projectWelcomeMessage = response.data.project.welcome_message || null
           
-          this.sections = response.data.sections // Sadece özet (exercise_count, is_completed)
+          // Backend'den zaten sıralı gelir (ps.order ASC), ama emin olmak için tekrar sırala
+          console.log('📊 Sections BEFORE filter:', response.data.sections.map(s => ({ title: s.section_title, order: s.order })))
+          
+          // Orphaned sections'ı filtrele (title null olanlar)
+          const validSections = response.data.sections.filter(s => s.section_title && s.section_title.trim() !== '')
+          
+          this.sections = validSections.sort((a, b) => (parseInt(a.order) || 0) - (parseInt(b.order) || 0))
+          console.log('📊 Sections AFTER filter & sort:', this.sections.map(s => ({ title: s.section_title, order: s.order })))
           this.participantId = response.data.participant.id
           this.participantName = response.data.participant.name
           this.participantEmail = response.data.participant.email
           this.startedAt = response.data.participant.started_at
           this.currentSectionId = response.data.participant.current_section_uuid
           this.completedAt = response.data.participant.completed_at
+          this.policiesAcceptedAt = response.data.participant.policies_accepted_at // KVKK onay durumu
           
           // Backend'den gelen toplam cevap sayısını kaydet
           const totalResponsesFromBackend = response.data.participant.total_responses || 0
@@ -325,8 +337,9 @@ export const useParticipantAssessmentStore = defineStore('participantAssessment'
           console.log('📍 Mevcut bölüm:', this.currentSectionId)
           console.log('📊 Toplam verilen cevap:', totalResponsesFromBackend)
           
-          // İlk bölümü aktif yap (eğer henüz başlanmamışsa)
-          if (!this.currentSectionId && this.sections.length > 0) {
+          // İlk bölümü aktif yap (SADECE eğer katılımcı daha önce başlamışsa ve bölümü yoksa)
+          // Eğer henüz başlamamışsa Intro ekranında kalmalı
+          if (!this.currentSectionId && this.sections.length > 0 && this.startedAt) {
             this.currentSectionId = this.sections[0].section_uuid
           }
           
@@ -657,6 +670,71 @@ export const useParticipantAssessmentStore = defineStore('participantAssessment'
     },
 
     /**
+     * Politikaları getir
+     */
+    async fetchLegalPolicies() {
+      try {
+        // Token korumalı endpoint olduğu için ApiService kullanıyoruz.
+        // ApiService'e sessionToken geçmeliyiz.
+        const api = new ApiService(this.sessionToken) 
+        
+        console.log('📜 Fetching policies from protected endpoint...')
+        
+        const response = await api.get('/legal-policies/consent')
+        
+        if (response.status === 'success') {
+          // Backend artık array döndürüyor
+          const policies = response.data.map(policy => ({
+            id: policy.policy_type,
+            policy_type: policy.policy_type,
+            title: policy.title,
+            content: policy.content,
+            button_text: policy.button_text,
+            require_signature: policy.require_signature === '1' || policy.require_signature === true,
+            version: policy.version
+          }))
+          
+          this.legalPolicies = policies
+          console.log('📜 Policies loaded:', policies.length)
+          console.log('📜 Policy types:', policies.map(p => p.policy_type).join(', '))
+          
+          return { success: true, data: policies }
+        } else {
+          return { success: false, error: response.message || 'Politikalar alınamadı' }
+        }
+      } catch (error) {
+        console.error('Fetch policies error:', error)
+        return { success: false, error: error.message }
+      }
+    },
+
+    /**
+     * KVKK ve yasal politikaları onayla (Backend'e kaydet)
+     */
+    async acceptPolicies(policies) {
+      try {
+        const api = new ApiService(this.sessionToken)
+        
+        console.log('✅ Saving policy consent to backend...', policies)
+        
+        const response = await api.post('/assessment/accept-policies', {
+          policies: policies
+        })
+        
+        if (response.status === 'success') {
+          this.policiesAcceptedAt = response.data.policies_accepted_at
+          console.log('✅ Policies consent saved:', this.policiesAcceptedAt)
+          return { success: true, data: response.data }
+        } else {
+          return { success: false, error: response.message || 'Politika onayı kaydedilemedi' }
+        }
+      } catch (error) {
+        console.error('Accept policies error:', error)
+        return { success: false, error: error.message }
+      }
+    },
+
+    /**
      * Error temizle
      */
     clearError() {
@@ -692,3 +770,6 @@ export const useParticipantAssessmentStore = defineStore('participantAssessment'
     ]
   }
 })
+
+// Alias export for composables (backward compatibility)
+export const useAssessmentStore = useParticipantAssessmentStore

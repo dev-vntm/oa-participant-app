@@ -51,7 +51,7 @@ export default defineNuxtConfig({
     server: {
       //Allow a domain
       allowedHosts: ['localhost', '127.0.0.1', '0.0.0.0', 'assessment.vakamaka.com', 'assessment-dev.vakamaka.com'],
-    }
+    } 
   },
   runtimeConfig: {
     public: {
@@ -76,7 +76,10 @@ export default defineNuxtConfig({
     }
   },
   
-  css: ['primeicons/primeicons.css'],
+  css: [
+    'primeicons/primeicons.css',
+    '~/assets/css/global.css'
+  ],
   
   ssr: false // SPA mode (session token için)
 })

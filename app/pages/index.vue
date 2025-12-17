@@ -3,69 +3,298 @@
   <Toast />
   <ConfirmDialog />
   <div class="assessment-workspace" lang="tr">
-    <!-- Welcome Dialog -->
+    <!-- Countdown Overlay -->
+    <div v-if="showCountdown" class="countdown-overlay">
+      <div class="countdown-content">
+        <div class="countdown-number">{{ countdownValue }}</div>
+        <div class="countdown-text">Başlıyor...</div>
+      </div>
+    </div>
+
+    <!-- Policy Dialog -->
     <Dialog 
-      v-model:visible="showWelcomeDialog" 
+      v-model:visible="showPolicyDialog" 
+      modal 
+      :closable="false"
+      :draggable="false"
+      :closeOnEscape="false"
+      :style="{ width: '60rem', maxWidth: '90vw' }"
+      class="policy-dialog"
+      header="Yasal Bilgilendirme ve Onaylar"
+    >
+      <div class="policy-content space-y-6">
+        <p class="text-gray-600 mb-4">
+          Değerlendirme sürecine başlamadan önce aşağıdaki politikaları okuyup onaylamanız gerekmektedir.
+        </p>
+        
+        <div v-for="policy in store.legalPolicies" :key="policy.id" class="policy-item border rounded-lg p-4 bg-gray-50">
+          <div class="flex items-start gap-3">
+            <div class="flex-1">
+              <h3 class="font-bold text-gray-800 mb-2">{{ policy.title }}</h3>
+              <div class="policy-text text-sm text-gray-600 max-h-32 overflow-y-auto mb-3 p-2 bg-white rounded border" v-html="policy.content"></div>
+              
+              <div class="flex items-center gap-2">
+                <Checkbox 
+                  v-model="policiesAcknowledged[policy.policy_type]" 
+                  :binary="true" 
+                  :inputId="'policy-' + policy.id" 
+                />
+                <label :for="'policy-' + policy.id" class="text-sm font-medium cursor-pointer select-none">
+                  {{ policy.button_text || 'Okudum, anladım, onaylıyorum.' }}
+                </label>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      
+      <template #footer>
+        <div class="flex justify-end">
+          <Button 
+            label="Onayla ve Devam Et" 
+            icon="pi pi-check" 
+            @click="approvePolicies" 
+            :disabled="!allPoliciesApproved"
+            severity="success"
+            size="large"
+          />
+        </div>
+      </template>
+    </Dialog>
+
+    <!-- Section Self-Evaluation Dialog -->
+    <Dialog 
+      v-model:visible="showSelfEvaluationDialog" 
       modal 
       :closable="false"
       :draggable="false"
       :style="{ width: '50rem', maxWidth: '90vw' }"
-      class="welcome-dialog"
+      class="self-evaluation-dialog"
     >
       <template #header>
         <div class="flex items-center gap-3">
-          <i class="pi pi-info-circle text-purple-600" style="font-size: 2rem;"></i>
-          <h2 class="text-2xl font-bold text-gray-800 m-0">Hoş Geldiniz!</h2>
+          <i class="pi pi-star text-purple-600" style="font-size: 2rem;"></i>
+          <h2 class="text-2xl font-bold text-gray-800 m-0">Bölüm Öz-Değerlendirmeniz</h2>
         </div>
       </template>
 
-      <div class="welcome-dialog-content">
-        <!-- HTML içeriği burada gösterilecek -->
-        <div 
-          v-if="store.projectWelcomeMessage" 
-          class="welcome-message-html"
-          v-html="store.projectWelcomeMessage"
-        ></div>
-        
-        <!-- Varsayılan mesaj -->
-        <div v-else class="default-welcome-message">
-          <h3>{{ store.projectName }} - Değerlendirmeye Hoş Geldiniz!</h3>
-          <p>
-            Bugün VakaMaka Değerlendirme ve Gelişim Merkezi simülasyonuna katılıyorsunuz. Tüm gün boyunca sistemde yer alan dokümanlardan ve size verilen bilgilerden yararlanacaksınız.
-          </p>
-          <p class="font-semibold">
-            Amacımız teknik bilginizi ölçmek değil; herhangi bir bilgi ezberlemenizi beklemiyoruz. Size verilen dokümanları gün içinde istediğiniz zaman tekrar açarak bilgi alabilirsiniz.
-          </p>
-          <p>
-            Bugün katılacağınız simülasyonda, Hard Cookie Games isimli bir oyun şirketinin, yeni oluşturulan proje grubunda çalışan rolünü üstleneceksiniz. Oyun sektörü hakkında önceden bilgi sahibi olmanız gerekmemektedir. Katılacağınız simülasyonda sergilediğiniz liderlik yetkinliklerinizi gözlemleyecek ve değerlendireceğiz.
-          </p>
-          <h4 class="text-lg font-semibold mt-4">Rolünüz:</h4>
-          <p>
-            Hard Cookie Games, ortaklık yapısı yakın zamanda değişmiş bir online oyun şirketidir. Değişen ortaklık yapısına bağlı olarak şirketin yönetim kurulundaki üye sayısı artmış ve üyeler arasında, yeni geliştirilen oyunlarla ilgili görüş ayrılıkları ortaya çıkmıştır.
-          </p>
-        </div>
+      <div class="self-evaluation-content">
+        <p class="text-gray-700 mb-4">
+          Tamamladığınız bölüm hakkında kendinizi değerlendirin. Bu değerlendirme raporunuza dahil edilecektir.
+        </p>
 
-        <!-- Onay kutucuğu -->
-        <div class="mt-6 flex items-start gap-3 p-4 bg-purple-50 rounded-lg border border-purple-200">
-          <Checkbox v-model="welcomeAcknowledged" :binary="true" inputId="acknowledge" />
-          <label for="acknowledge" class="text-sm text-gray-700 cursor-pointer">
-            <span class="font-semibold">Okudum, anladım.</span> Değerlendirme sürecine devam etmek için bu kutucuğu işaretleyip "Devam Et" butonuna tıklayabilirsiniz.
-          </label>
+        <div class="questions-list space-y-6">
+          <div 
+            v-for="(question, index) in selfEvaluationQuestions" 
+            :key="question.id"
+            class="question-item"
+          >
+            <div class="question-header">
+              <h4 class="font-semibold text-gray-900">
+                {{ index + 1 }}. {{ question.question_text }}
+                <span v-if="question.is_required" class="text-red-500 ml-1">*</span>
+              </h4>
+            </div>
+
+            <!-- Likert 5 Scale -->
+            <div v-if="question.question_type === 'likert_5'" class="likert-scale mt-3">
+              <div class="flex justify-between items-center gap-2">
+                <button
+                  v-for="value in 5"
+                  :key="value"
+                  @click="selfEvaluationAnswers[question.id] = value"
+                  :class="[
+                    'likert-button',
+                    selfEvaluationAnswers[question.id] === value ? 'active' : ''
+                  ]"
+                >
+                  {{ value }}
+                </button>
+              </div>
+              <div class="flex justify-between text-xs text-gray-500 mt-2">
+                <span>Hiç Katılmıyorum</span>
+                <span>Tamamen Katılıyorum</span>
+              </div>
+            </div>
+
+            <!-- Likert 7 Scale -->
+            <div v-else-if="question.question_type === 'likert_7'" class="likert-scale mt-3">
+              <div class="flex justify-between items-center gap-2">
+                <button
+                  v-for="value in 7"
+                  :key="value"
+                  @click="selfEvaluationAnswers[question.id] = value"
+                  :class="[
+                    'likert-button',
+                    selfEvaluationAnswers[question.id] === value ? 'active' : ''
+                  ]"
+                >
+                  {{ value }}
+                </button>
+              </div>
+              <div class="flex justify-between text-xs text-gray-500 mt-2">
+                <span>Hiç Katılmıyorum</span>
+                <span>Tamamen Katılıyorum</span>
+              </div>
+            </div>
+
+            <!-- Yes/No -->
+            <div v-else-if="question.question_type === 'yes_no'" class="yes-no-buttons mt-3">
+              <Button
+                label="Evet"
+                :outlined="selfEvaluationAnswers[question.id] !== 'yes'"
+                :severity="selfEvaluationAnswers[question.id] === 'yes' ? 'success' : 'secondary'"
+                @click="selfEvaluationAnswers[question.id] = 'yes'"
+                class="mr-2"
+              />
+              <Button
+                label="Hayır"
+                :outlined="selfEvaluationAnswers[question.id] !== 'no'"
+                :severity="selfEvaluationAnswers[question.id] === 'no' ? 'danger' : 'secondary'"
+                @click="selfEvaluationAnswers[question.id] = 'no'"
+              />
+            </div>
+
+            <!-- Open Text -->
+            <div v-else-if="question.question_type === 'open_text'" class="open-text mt-3">
+              <Textarea
+                v-model="selfEvaluationAnswers[question.id]"
+                rows="4"
+                placeholder="Cevabınızı buraya yazın..."
+                class="w-full"
+              />
+            </div>
+          </div>
         </div>
       </div>
 
       <template #footer>
         <div class="flex justify-end gap-2">
           <Button 
-            label="Devam Et" 
-            icon="pi pi-arrow-right"
-            iconPos="right"
-            @click="closeWelcomeDialog"
-            :disabled="!welcomeAcknowledged"
+            label="Kaydet ve Devam Et" 
+            icon="pi pi-check"
+            @click="saveSelfEvaluationAnswers"
+            severity="success"
             size="large"
-            class="p-button-success"
           />
         </div>
+      </template>
+    </Dialog>
+
+    <!-- Character Card Detail Popup -->
+    <Dialog 
+      v-model:visible="showCharacterPopup" 
+      modal 
+      :closable="true"
+      :draggable="false"
+      :style="{ width: '42rem', maxWidth: '95vw', maxHeight: '90vh' }"
+      class="character-detail-dialog"
+    >
+      <template #header>
+        <div class="flex items-center gap-3">
+          <i class="pi pi-id-card text-indigo-600" style="font-size: 1.5rem;"></i>
+          <h2 class="text-xl font-bold text-gray-800 m-0">Kişi Kartı</h2>
+        </div>
+      </template>
+
+      <div v-if="selectedCharacter" class="character-detail-content">
+        <!-- Kişi Fotoğrafı ve Temel Bilgiler -->
+        <div class="character-header-section">
+          <div class="character-avatar-large">
+            <img 
+              v-if="selectedCharacter.photo || selectedCharacter.photo_path" 
+              :src="selectedCharacter.photo || selectedCharacter.photo_path" 
+              :alt="selectedCharacter.name"
+              class="avatar-image"
+            />
+            <i v-else class="pi pi-user avatar-placeholder"></i>
+          </div>
+          <div class="character-main-info">
+            <h3 class="character-name">{{ selectedCharacter.name }}</h3>
+            <p class="character-title" v-if="selectedCharacter.title">{{ selectedCharacter.title }}</p>
+            <p class="character-department" v-if="selectedCharacter.department">
+              <i class="pi pi-building"></i> {{ selectedCharacter.department }}
+            </p>
+            <p class="character-role" v-if="selectedCharacter.role">
+              <i class="pi pi-briefcase"></i> {{ selectedCharacter.role }}
+            </p>
+          </div>
+        </div>
+
+        <!-- Eğitim Bilgileri -->
+        <div v-if="selectedCharacter.education_html" class="character-info-block">
+          <div class="info-block-header">
+            <i class="pi pi-graduation-cap"></i>
+            <span>Eğitim Bilgileri</span>
+          </div>
+          <div class="info-block-content" v-html="selectedCharacter.education_html"></div>
+        </div>
+
+        <!-- Kariyer Özeti -->
+        <div v-if="selectedCharacter.career_summary" class="character-info-block">
+          <div class="info-block-header">
+            <i class="pi pi-chart-line"></i>
+            <span>Kariyer Özeti</span>
+          </div>
+          <div class="info-block-content" v-html="selectedCharacter.career_summary"></div>
+        </div>
+
+        <!-- Kişilik Özellikleri -->
+        <div v-if="selectedCharacter.personality_traits_html" class="character-info-block">
+          <div class="info-block-header">
+            <i class="pi pi-heart"></i>
+            <span>Kişilik Özellikleri</span>
+          </div>
+          <div class="info-block-content" v-html="selectedCharacter.personality_traits_html"></div>
+        </div>
+
+        <!-- Güçlü Yönler -->
+        <div v-if="selectedCharacter.strengths_html" class="character-info-block">
+          <div class="info-block-header">
+            <i class="pi pi-star"></i>
+            <span>Güçlü Yönler</span>
+          </div>
+          <div class="info-block-content" v-html="selectedCharacter.strengths_html"></div>
+        </div>
+
+        <!-- Gelişim Alanları -->
+        <div v-if="selectedCharacter.development_areas_html" class="character-info-block">
+          <div class="info-block-header">
+            <i class="pi pi-sync"></i>
+            <span>Gelişim Alanları</span>
+          </div>
+          <div class="info-block-content" v-html="selectedCharacter.development_areas_html"></div>
+        </div>
+      </div>
+    </Dialog>
+
+    <!-- Section Instructions Popup (Bölüm Talimatları) -->
+    <Dialog 
+      v-model:visible="showInstructionsPopup" 
+      modal 
+      :closable="true"
+      :draggable="false"
+      :style="{ width: '36rem', maxWidth: '95vw' }"
+      class="instructions-popup-dialog"
+    >
+      <template #header>
+        <div class="flex items-center gap-3">
+          <i class="pi pi-info-circle text-blue-600" style="font-size: 1.5rem;"></i>
+          <h2 class="text-xl font-bold text-gray-800 m-0">Bölüm Talimatları</h2>
+        </div>
+      </template>
+
+      <div v-if="currentSection?.section_description" class="instructions-popup-content">
+        <div class="instructions-text" v-html="currentSection.section_description"></div>
+      </div>
+
+      <template #footer>
+        <Button 
+          label="Anladım" 
+          icon="pi pi-check"
+          @click="dismissInstructionsPopup"
+          severity="primary"
+        />
       </template>
     </Dialog>
 
@@ -78,6 +307,23 @@
         </div>
         
         <div class="header-actions">
+          <div class="inventory-btn-wrapper">
+            <Button
+              icon="pi pi-folder-open"
+              label="Vaka Dosyaları"
+              @click="toggleInventorySidebar"
+              outlined
+              size="small"
+              class="inventory-toggle-btn"
+            />
+            <Badge 
+              v-if="documentCountInCurrentSection > 0" 
+              :value="documentCountInCurrentSection" 
+              severity="info"
+              class="inventory-badge"
+            />
+          </div>
+          
           <div class="progress-info">
             <span class="progress-text">{{ store.overallProgress }}% Tamamlandı</span>
             <ProgressBar 
@@ -107,6 +353,26 @@
         </div>
         
         <div class="sections-list">
+          <!-- Intro Section Item (Sadece assessment başlamadan önce göster) -->
+          <div 
+            v-if="!store.hasStartedUI"
+            class="section-item intro-item"
+            :class="{ 'active': store.currentSectionId === 'intro' }"
+            @click="selectSection('intro')"
+          >
+            <div class="section-icon">
+              <i class="pi pi-home"></i>
+            </div>
+            <div class="section-info">
+              <h4>Giriş</h4>
+              <div class="section-meta">
+                <span class="exercise-count">
+                  Hoş Geldiniz
+                </span>
+              </div>
+            </div>
+          </div>
+
           <div
             v-for="(section, index) in store.sections"
             :key="section.section_uuid"
@@ -131,10 +397,6 @@
                   <i class="pi pi-list"></i>
                   {{ section.exercise_count || section.exercises?.length || 0 }} Egzersiz
                 </span>
-                <span class="duration">
-                  <i class="pi pi-clock"></i>
-                  {{ getSectionDuration(section) }} dk
-                </span>
               </div>
               
               <ProgressBar
@@ -149,17 +411,25 @@
 
       <!-- Center: Exercises Area -->
       <div class="exercises-area">
-        <!-- Welcome Screen -->
-        <div v-if="!store.hasStartedUI" class="welcome-screen">
+        <!-- Intro Screen (Giriş Bölümü İçeriği) -->
+        <div v-if="store.currentSectionId === 'intro'" class="welcome-screen">
           <div class="welcome-content">
             <div class="welcome-icon">
               <i class="pi pi-play-circle" style="font-size: 4rem; color: #8b5cf6;"></i>
             </div>
             <h2>Hazırsan Başlayalım! 🚀</h2>
-            <p class="welcome-message">
-              {{ store.projectName }} değerlendirmesine hoş geldiniz.<br>
-              Başlamak için aşağıdaki butona tıklayın.
-            </p>
+            <div class="welcome-message-container">
+              <div 
+                v-if="store.projectWelcomeMessage" 
+                class="welcome-message-html mb-6"
+                v-html="store.projectWelcomeMessage"
+              ></div>
+              <p v-else class="welcome-message">
+                {{ store.projectName }} değerlendirmesine hoş geldiniz.<br>
+                Başlamak için aşağıdaki butona tıklayın.
+              </p>
+            </div>
+            
             <div class="welcome-stats">
               <div class="stat-item">
                 <i class="pi pi-list"></i>
@@ -174,13 +444,29 @@
                 <span>~{{ totalDuration }} Dakika</span>
               </div>
             </div>
-            <Button
-              label="Başla"
-              icon="pi pi-arrow-right"
-              size="large"
-              @click="startWorkspace"
-              class="start-button"
-            />
+            <div class="intro-actions mt-6 mb-6 flex flex-col items-center gap-4">
+              <div class="flex items-center gap-2 bg-white p-3 rounded border border-gray-200 shadow-sm">
+                <Checkbox v-model="introAcknowledged" :binary="true" inputId="intro-ack" />
+                <label for="intro-ack" class="cursor-pointer select-none text-gray-700 font-medium">
+                  Değerlendirme yönergelerini okudum ve anladım.
+                </label>
+              </div>
+              
+              <div class="h-16 flex items-center justify-center min-w-[200px]">
+                <Button
+                  v-if="introAcknowledged"
+                  label="Başla"
+                  icon="pi pi-arrow-right"
+                  size="large"
+                  @click="startWorkspace"
+                  class="start-button animate-fade-in"
+                  :disabled="!store.sections.length"
+                />
+                <span v-else class="text-sm text-gray-500 italic bg-gray-50 px-3 py-1 rounded">
+                  Devam etmek için lütfen yönergeleri onaylayın.
+                </span>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -213,12 +499,30 @@
           <div class="modern-section-header">
             <div class="header-content">
               <div class="header-title-area">
-                <h1 class="section-title">{{ currentSection?.section_title }}</h1>
-                <p class="section-subtitle" v-if="currentSection?.section_description">
-                  {{ currentSection?.section_description }}
-                </p>
+                <div class="title-with-badge">
+                  <h1 class="section-title">{{ currentSection?.section_title }}</h1>
+                  <!-- Presentation türünde egzersiz başlığı ve badge burada gösterilir -->
+                  <template v-if="currentExercise?.exercise_type === 'presentation'">
+                    <span class="title-separator">•</span>
+                    <span class="exercise-title-inline">{{ currentExercise.exercise_title }}</span>
+                    <span class="exercise-type-badge-inline presentation">Sunum</span>
+                  </template>
+                  <!-- Analiz türünde egzersiz başlığı ve badge burada gösterilir -->
+                  <template v-if="currentExercise?.exercise_type === 'analysis'">
+                    <span class="title-separator">•</span>
+                    <span class="exercise-title-inline">{{ currentExercise.exercise_title }}</span>
+                    <span class="exercise-type-badge-inline analysis">Analiz</span>
+                  </template>
+                  <!-- Ekip Kurma türünde egzersiz başlığı ve badge burada gösterilir -->
+                  <template v-if="currentExercise?.exercise_type === 'team_building'">
+                    <span class="title-separator">•</span>
+                    <span class="exercise-title-inline">{{ currentExercise.exercise_title }}</span>
+                    <span class="exercise-type-badge-inline team_building">Ekip Kurma</span>
+                  </template>
+                </div>
+                <p class="section-subtitle" v-if="currentSection?.section_description" v-html="stripHtml(currentSection?.section_description)"></p>
               </div>
-              <div class="flex justify-between">
+              <div class="header-actions-row">
                 <div class="progress-stats">
                   <span class="stat-badge">
                     <i class="pi pi-list"></i>
@@ -226,18 +530,54 @@
                   </span>
                   <span class="stat-badge">
                     <i class="pi pi-clock"></i>
-                    {{ formatTime(remainingTime) }} Kalan Süre
+                    {{ formattedTime }} Kalan Süre
                   </span>
+                  <!-- Talimatlar Butonu -->
+                  <button 
+                    v-if="hasInstructions" 
+                    class="instructions-hint-btn"
+                    @click="openInstructionsPopup"
+                    title="Egzersiz talimatlarını görüntüle"
+                  >
+                    <i class="pi pi-info-circle"></i>
+                    <span>Talimatlar</span>
+                  </button>
                 </div>
+                <!-- Normal egzersizler için Bölümü Tamamla (Ekip Kurma hariç) -->
                 <Button
-                  v-if="canCompleteSection"
+                  v-if="canCompleteSection && currentExercise?.exercise_type !== 'presentation' && currentExercise?.exercise_type !== 'team_building'"
                   label="Bölümü Tamamla"
                   icon="pi pi-arrow-right"
                   severity="success"
                   raised
                   @click="completeSectionAndNext"
-                  class="complete-section-btn ml-8"
+                  class="complete-section-btn"
                 />
+                <!-- Ekip Kurma egzersizi için Kaydet butonu -->
+                <Button
+                  v-if="currentExercise?.exercise_type === 'team_building' && !isExerciseAnswered(currentExercise.exercise_uuid)"
+                  :label="isLastExerciseInSection ? 'Ekibi Kaydet ve Tamamla' : 'Ekibi Kaydet'"
+                  :icon="isLastExerciseInSection ? 'pi pi-check-circle' : 'pi pi-save'"
+                  :loading="savingExercise === currentExercise.exercise_uuid"
+                  :disabled="!exerciseAnswers[currentExercise.exercise_uuid] || !exerciseAnswers[currentExercise.exercise_uuid].includes('=== OLUŞTURULAN EKİP ===') || !exerciseAnswers[currentExercise.exercise_uuid].includes('=== AÇIKLAMA ===')"
+                  @click="confirmAndSave(currentExercise)"
+                  severity="success"
+                  raised
+                  class="complete-section-btn"
+                />
+                <!-- Sunum egzersizi için Bölümü Tamamla (son slide'da görünür) -->
+                <Transition name="slide-fade">
+                  <Button
+                    v-if="currentExercise?.exercise_type === 'presentation' && currentSlide >= totalSlides"
+                    :label="isLastExerciseInSection ? 'Bölümü Tamamla' : 'Devam Et'"
+                    :icon="isLastExerciseInSection ? 'pi pi-check-circle' : 'pi pi-arrow-right'"
+                    iconPos="right"
+                    severity="success"
+                    raised
+                    @click="markPresentationAsViewed(currentExercise)"
+                    class="complete-section-btn presentation-complete-btn"
+                  />
+                </Transition>
               </div>
               
             </div>
@@ -250,8 +590,21 @@
             </div>
           </div>
 
-          <!-- Modern Single Exercise View -->
-          <div class="modern-exercise-container" v-if="currentExercise">
+          <!-- Email Inbox View (for Email Correspondence Section) -->
+          <EmailInboxView 
+            v-if="currentSection?.section_type === 'email_correspondence'"
+            :exercises="currentSectionExercises"
+            :exercise-answers="exerciseAnswers"
+            :saving-exercise="savingExercise"
+            :is-exercise-answered="isExerciseAnswered"
+            :characters="currentSection?.characters"
+            @save-answer="confirmAndSave"
+            @save-and-next="confirmAndSaveAndNext"
+            @show-character="showCharacterDetail"
+          />
+
+          <!-- Modern Single Exercise View (for other section types) -->
+          <div v-else class="modern-exercise-container" v-if="currentExercise">
             <div class="exercise-navigation" v-if="currentSectionExercises.length > 1">
               <!-- Önceki Egzersiz -->
               <div v-if="currentExerciseIndex > 0" class="nav-button-wrapper">
@@ -278,7 +631,7 @@
                     class="dot"
                     :class="{ 
                       'active': idx === currentExerciseIndex,
-                      'completed': hasResponse(ex.exercise_uuid)
+                      'completed': hasExerciseResponse(ex.exercise_uuid)
                     }"
                     @click="goToExercise(idx)"
                   ></span>
@@ -300,66 +653,84 @@
               <div v-else class="nav-button-placeholder"></div>
             </div>
 
-            <div class="modern-exercise-card">
-              <!-- Exercise Header -->
-              <div class="exercise-card-header">
-                <h2 class="exercise-title">{{ currentExercise.exercise_title }}</h2>
-                <div class="exercise-badge-container">
-                  <span class="exercise-type-badge" :class="currentExercise.exercise_type || 'info'">
-                    {{ formatQuestionType(currentExercise.exercise_type || 'Bilgilendirme') }}
-                  </span>
-                  <Tag
-                    v-if="hasResponse(currentExercise.exercise_uuid)"
-                    value="Tamamlandı"
-                    severity="success"
-                    icon="pi pi-check"
-                    class="completed-tag"
-                  />
-                </div>
-                
-              </div>
-
-              <!-- Exercise Instructions (Talimatlar) - Collapsible -->
-              <Panel 
-                v-if="currentExercise.instructions"
-                :collapsed="false"
-                toggleable
-                class="exercise-instructions-panel"
-              >
-                <template #header>
-                  <div class="instructions-panel-header">
-                    <div class="header-left">
-                      <i class="pi pi-info-circle"></i>
-                      <span>Talimatlar</span>
-                    </div>
-                    <div class="header-right">
-                      <Button
-                        icon="pi pi-volume-up"
-                        :label="isSpeaking ? 'Durdur' : 'Dinle'"
-                        text
-                        rounded
-                        size="small"
-                        :severity="isSpeaking ? 'danger' : 'secondary'"
-                        @click.stop="toggleSpeech(currentExercise.instructions)"
-                        :loading="isSpeechLoading"
-                      />
-                    </div>
+            <div class="modern-exercise-card" :class="{ 
+              'info-type-card': currentExercise.exercise_type === 'info' || currentExercise.exercise_type === 'Bilgilendirme',
+              'presentation-type-card': currentExercise.exercise_type === 'presentation'
+            }">
+              
+              <!-- Scrollable Content Area (Presentation türünde gizlenir) -->
+              <div class="exercise-content-area" v-if="currentExercise.exercise_type !== 'presentation'">
+                <!-- Exercise Header (Analiz ve Ekip Kurma türünde gizlenir - başlık section header'da) -->
+                <div class="exercise-card-header" v-if="currentExercise.exercise_type !== 'analysis' && currentExercise.exercise_type !== 'team_building'">
+                  <h2 class="exercise-title">{{ currentExercise.exercise_title }}</h2>
+                  <div class="exercise-badge-container">
+                    <span class="exercise-type-badge" :class="currentExercise.exercise_type || 'info'">
+                      {{ formatQuestionType(currentExercise.exercise_type || 'Bilgilendirme') }}
+                    </span>
+                    <Tag
+                      v-if="hasExerciseResponse(currentExercise.exercise_uuid)"
+                      value="Tamamlandı"
+                      severity="success"
+                      icon="pi pi-check"
+                      class="completed-tag"
+                    />
                   </div>
-                </template>
-                <div class="instructions-content" v-html="currentExercise.instructions"></div>
-              </Panel>
+                  
+                </div>
 
-              <!-- Exercise Description -->
-              <div class="exercise-description-modern" v-if="currentExercise.description">
-                <p>{{ currentExercise.description }}</p>
+                <!-- Exercise Instructions (Talimatlar) - Email View or Default View (Analiz ve Ekip Kurma türünde gizlenir) -->
+                <template v-if="currentExercise.instructions && currentExercise.exercise_type !== 'analysis' && currentExercise.exercise_type !== 'team_building'">
+                  <!-- Email View for Email Correspondence Section -->
+                  <EmailView 
+                    v-if="currentSection?.section_type === 'email_correspondence'"
+                    :instructions="currentExercise.instructions"
+                    :related-characters="currentExercise.related_characters"
+                    :characters="currentSection?.characters"
+                    @show-character="showCharacterDetail"
+                  />
+                  
+                  <!-- Default View for Standard Sections -->
+                  <DefaultView 
+                    v-else
+                    :instructions="currentExercise.instructions"
+                  />
+                </template>
+
+                <!-- Exercise Description (Analiz türünde gizlenir) -->
+                <div class="exercise-description-modern" v-if="currentExercise.description && currentExercise.exercise_type !== 'analysis'">
+                  <p>{{ currentExercise.description }}</p>
+                </div>
               </div>
 
-              <!-- Answer Section (Bilgilendirme değilse) -->
-              <div v-if="currentExercise.exercise_type !== 'info' && currentExercise.exercise_type !== 'Bilgilendirme'" class="modern-answer-section">
+              <!-- Ekip Kurma Egzersizi -->
+              <div v-if="currentExercise.exercise_type === 'team_building'" class="team-building-section">
+                <TeamBuildingView
+                  v-model="exerciseAnswers[currentExercise.exercise_uuid]"
+                  :instructions="currentExercise.instructions"
+                  :related-characters="currentExercise.related_characters"
+                  :characters="currentSection?.characters"
+                  :disabled="isExerciseAnswered(currentExercise.exercise_uuid)"
+                  @show-character="showCharacterDetail"
+                />
+                
+                <!-- Cevap kaydedildiyse bilgi mesajı göster -->
+                <div v-if="isExerciseAnswered(currentExercise.exercise_uuid)" class="answer-locked-info team-building-locked">
+                  <i class="pi pi-lock"></i>
+                  <span>Bu egzersiz için ekip seçiminiz kaydedildi. Artık değişiklik yapamazsınız.</span>
+                </div>
+              </div>
+
+              <!-- Answer Section (Bilgilendirme, Sunum ve Ekip Kurma değilse) -->
+              <div v-else-if="currentExercise.exercise_type !== 'info' && currentExercise.exercise_type !== 'Bilgilendirme' && currentExercise.exercise_type !== 'presentation' && currentExercise.exercise_type !== 'team_building'" 
+                   class="modern-answer-section"
+                   :class="{ 'analysis-report-section': currentExercise.exercise_type === 'analysis' }">
                 <div class="answer-header">
                   <label class="answer-label">
-                    <i class="pi pi-pencil"></i>
-                    {{ isExerciseAnswered(currentExercise.exercise_uuid) ? 'Kaydedilen Cevabınız (Düzenlenemez)' : 'Cevabınız' }}
+                    <i :class="currentExercise.exercise_type === 'analysis' ? 'pi pi-file-edit' : 'pi pi-pencil'"></i>
+                    {{ currentExercise.exercise_type === 'analysis' 
+                        ? (isExerciseAnswered(currentExercise.exercise_uuid) ? 'Analiz Raporunuz (Kaydedildi)' : 'Analiz Raporunuz')
+                        : (isExerciseAnswered(currentExercise.exercise_uuid) ? 'Kaydedilen Cevabınız (Düzenlenemez)' : 'Cevabınız') 
+                    }}
                   </label>
                   <Button
                     v-if="!isExerciseAnswered(currentExercise.exercise_uuid)"
@@ -373,9 +744,10 @@
                 </div>
                 <TipTapEditor
                   v-model="exerciseAnswers[currentExercise.exercise_uuid]"
-                  :placeholder="isExerciseAnswered(currentExercise.exercise_uuid) ? 'Bu cevap kaydedildi ve değiştirilemez.' : 'Düşüncelerinizi buraya yazabilirsiniz...'"
+                  :placeholder="getEditorPlaceholder(currentExercise)"
                   :disabled="isExerciseAnswered(currentExercise.exercise_uuid)"
-                  :character-limit="5000"
+                  :character-limit="currentExercise.exercise_type === 'analysis' ? 10000 : 5000"
+                  :class="{ 'analysis-editor': currentExercise.exercise_type === 'analysis' }"
                 />
                 
                 <!-- Ses kaydı varsa göster -->
@@ -438,8 +810,8 @@
                 </div>
               </div>
 
-              <!-- Bilgilendirme Egzersizi (Info Type) -->
-              <div v-else class="info-exercise-actions">
+              <!-- Bilgilendirme Egzersizi (Info Type) - Sticky Footer -->
+              <div v-else-if="currentExercise.exercise_type === 'info' || currentExercise.exercise_type === 'Bilgilendirme'" class="info-exercise-footer">
                 <div class="info-message">
                   <i class="pi pi-lightbulb"></i>
                   <span>Bu bir bilgilendirme egzersizidir. Hazır olduğunuzda devam edebilirsiniz.</span>
@@ -447,10 +819,95 @@
                 <Button
                   label="Anladım, Devam Et"
                   icon="pi pi-arrow-right"
+                  iconPos="right"
                   @click="markInfoAsRead(currentExercise)"
                   size="large"
                   class="info-continue-btn"
                 />
+              </div>
+
+              <!-- Sunum Egzersizi (Presentation Type) - Slide Show -->
+              <div v-else-if="currentExercise.exercise_type === 'presentation'" class="presentation-exercise-container" :class="{ 'fullscreen-mode': isSlideFullscreen }">
+
+                <!-- Slide Show Viewer -->
+                <div class="slide-show-container" v-if="getPresentationFile(currentExercise)">
+                  <!-- Slide Area with Overlay Navigation -->
+                  <div class="slide-area">
+                    <!-- Slide Content -->
+                    <div class="slide-content" ref="slideContainer" @click="toggleSlideFullscreen">
+                      <div class="slide-wrapper" :class="{ 'slide-transitioning': isSlideTransitioning }">
+                        <canvas ref="pdfCanvas" class="pdf-slide-canvas"></canvas>
+                      </div>
+                      
+                      <!-- Loading Overlay -->
+                      <div v-if="pdfSlideLoading" class="slide-loading-overlay">
+                        <ProgressSpinner style="width: 40px; height: 40px;" strokeWidth="3" />
+                      </div>
+
+                      <!-- Overlay Navigation Buttons -->
+                      <button 
+                        class="slide-nav-overlay slide-nav-prev"
+                        @click.stop="prevSlide"
+                        :disabled="currentSlide <= 1"
+                        :class="{ 'disabled': currentSlide <= 1 }"
+                      >
+                        <i class="pi pi-chevron-left"></i>
+                      </button>
+
+                      <button 
+                        class="slide-nav-overlay slide-nav-next"
+                        @click.stop="nextSlide"
+                        :disabled="currentSlide >= totalSlides"
+                        :class="{ 'disabled': currentSlide >= totalSlides }"
+                      >
+                        <i class="pi pi-chevron-right"></i>
+                      </button>
+
+                      <!-- Fullscreen Toggle -->
+                      <button 
+                        class="fullscreen-toggle"
+                        @click.stop="toggleSlideFullscreen"
+                        v-tooltip.top="isSlideFullscreen ? 'Küçült (ESC)' : 'Tam Ekran'"
+                      >
+                        <i :class="isSlideFullscreen ? 'pi pi-window-minimize' : 'pi pi-window-maximize'"></i>
+                      </button>
+
+                      <!-- Slide Counter Overlay -->
+                      <div class="slide-counter-overlay">
+                        {{ currentSlide }} / {{ totalSlides }}
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- Slide Progress Bar -->
+                  <div class="slide-progress-container">
+                    <div class="slide-progress-bar">
+                      <div 
+                        class="slide-progress-fill" 
+                        :style="{ width: `${(currentSlide / totalSlides) * 100}%` }"
+                      ></div>
+                    </div>
+                  </div>
+
+                  <!-- Slide Thumbnails (Mini Navigation) -->
+                  <div class="slide-thumbnails" v-if="totalSlides > 1">
+                    <button 
+                      v-for="n in totalSlides" 
+                      :key="n"
+                      class="slide-thumb"
+                      :class="{ 'active': n === currentSlide, 'viewed': n < currentSlide }"
+                      @click="goToSlide(n)"
+                    >
+                      {{ n }}
+                    </button>
+                  </div>
+                </div>
+
+                <!-- PDF yoksa bilgi mesajı -->
+                <div v-else class="no-presentation-file">
+                  <i class="pi pi-info-circle"></i>
+                  <p>Bu egzersiz için sunum dosyası bulunamadı.</p>
+                </div>
               </div>
             </div>
           </div>
@@ -458,7 +915,7 @@
       </div>
 
       <!-- Right Sidebar: Section Documents / PDF Viewer -->
-      <div class="documents-sidebar" v-if="store.sections.length > 0" :class="{ 'pdf-viewer-active': pdfViewerDialog, 'pdf-fullscreen': pdfFullscreen }">
+      <div class="documents-sidebar" v-if="(showInventorySidebar || pdfViewerDialog) && store.sections.length > 0 && !showSectionCompletedMessage" :class="{ 'pdf-viewer-active': pdfViewerDialog, 'pdf-fullscreen': pdfFullscreen }">
         <!-- PDF Viewer Mode -->
         <template v-if="pdfViewerDialog">
           <div class="pdf-viewer-header">
@@ -499,95 +956,38 @@
 
         <!-- Document List Mode -->
         <template v-else>
-          <div class="sidebar-header">
-            <h3>Bölüm Envanteri</h3>
-          </div>
+          <div class="inventory-sidebar-content">
+            <div class="sidebar-header">
+              <h3>Vaka Dosyaları</h3>
+            </div>
           
-          <div class="documents-content">
-          <!-- Bölüm Timer -->
-          <div class="section-timer-card" v-if="store.hasStartedUI && store.currentSectionId">
-            <div class="timer-icon">
-              <i class="pi pi-clock"></i>
-            </div>
-            <div class="timer-info">
-              <span class="timer-label">Kalan Süre</span>
-              <span class="timer-value" :class="{ 'timer-warning': remainingTime < 300 }">
-                {{ formatTime(remainingTime) }}
-              </span>
-            </div>
-          </div>
-
-          <!-- İlk Bölüm Süresi (henüz başlamadıysa) -->
-          <div class="section-timer-card" v-else-if="!store.hasStartedUI">
-            <div class="timer-icon">
-              <i class="pi pi-clock"></i>
-            </div>
-            <div class="timer-info">
-              <span class="timer-label">İlk Bölüm Süresi</span>
-              <span class="timer-value">
-                {{ formatTime(firstSectionDuration * 60) }}
-              </span>
-            </div>
-          </div>
-
-          <!-- Bölüm tamamlanmadıysa dosyaları göster -->
-          <Divider v-if="!showSectionCompletedMessage && ((store.hasStartedUI && currentSection?.section_inventory_file) || (!store.hasStartedUI && store.sections[0]?.section_inventory_file))" />
-
-          <!-- Bölüm Envanteri Dosyası -->
-          <div v-if="!showSectionCompletedMessage && ((store.hasStartedUI && currentSection?.section_inventory_file) || (!store.hasStartedUI && store.sections[0]?.section_inventory_file))" class="document-item">
-            <div class="document-icon">
-              <i class="pi pi-file-pdf" style="font-size: 2rem; color: #ef4444;"></i>
-            </div>
-            <div class="document-info">
-              <h4>{{ (store.hasStartedUI ? currentSection?.section_title : store.sections[0]?.section_title) }} - Envanter</h4>
-              <p class="document-meta">PDF Döküman</p>
-            </div>
-            <Button
-              icon="pi pi-eye"
-              label="Görüntüle"
-              size="small"
-              outlined
-              @click="viewDocument(
-                store.hasStartedUI ? currentSection.section_inventory_file : store.sections[0].section_inventory_file,
-                (store.hasStartedUI ? currentSection?.section_title : store.sections[0]?.section_title) + ' - Envanter'
-              )"
-            />
-          </div>
-
-          <!-- Egzersiz Dosyaları (sadece başladıysa ve bölüm tamamlanmadıysa) -->
-          <div v-if="!showSectionCompletedMessage && store.hasStartedUI && currentExerciseFiles.length > 0">
-            <Divider />
-            <h4 class="documents-section-title">Egzersiz Dosyaları</h4>
-            <div v-for="(file, index) in currentExerciseFiles" :key="index" class="document-item">
-              <div class="document-icon">
-                <i class="pi pi-file" style="font-size: 1.5rem; color: #3b82f6;"></i>
+            <div class="documents-content">
+              <!-- Dosya Listesi - Minimal Görünüm -->
+              <div v-if="allAccessibleFiles.length > 0" class="files-list">
+                <div 
+                  v-for="(file, index) in allAccessibleFiles" 
+                  :key="index" 
+                  class="file-item-minimal"
+                  @click="viewDocument(file.file_path, file.file_name)"
+                >
+                  <div class="file-icon-minimal">
+                    <i :class="file.type === 'inventory' ? 'pi pi-file-pdf' : (file.type === 'presentation' ? 'pi pi-desktop' : 'pi pi-file')" 
+                       :style="{ color: file.type === 'inventory' ? '#ef4444' : (file.type === 'presentation' ? '#8b5cf6' : '#3b82f6') }"></i>
+                  </div>
+                  <div class="file-info-minimal">
+                    <span class="file-name-minimal">{{ file.file_name }}</span>
+                    <span class="file-section-minimal">{{ file.section_title }}</span>
+                  </div>
+                  <i class="pi pi-chevron-right file-arrow"></i>
+                </div>
               </div>
-              <div class="document-info">
-                <h4>{{ file.exercise_title }}</h4>
-                <p class="document-meta">{{ file.file_name }}</p>
-              </div>
-              <Button
-                :icon="pdfLoading ? 'pi pi-spin pi-spinner' : 'pi pi-eye'"
-                :label="pdfLoading ? 'Yükleniyor...' : 'Aç'"
-                size="small"
-                outlined
-                :disabled="pdfLoading"
-                @click="viewDocument(file.file_path, file.file_name)"
-              />
-            </div>
-          </div>
 
-          <!-- Empty state -->
-          <div v-if="store.hasStartedUI && !currentSection?.section_inventory_file && currentExerciseFiles.length === 0" class="empty-documents">
-            <i class="pi pi-inbox" style="font-size: 2.5rem; color: #d1d5db;"></i>
-            <p>Bu bölüm için döküman bulunmuyor</p>
-          </div>
-          
-          <!-- Henüz başlamadı ve dosya yok -->
-          <div v-if="!store.hasStartedUI && !store.sections[0]?.section_inventory_file" class="empty-documents">
-            <i class="pi pi-inbox" style="font-size: 2.5rem; color: #d1d5db;"></i>
-            <p>Bu bölüm için döküman bulunmuyor</p>
-          </div>
+              <!-- Empty state -->
+              <div v-else class="empty-documents">
+                <i class="pi pi-inbox" style="font-size: 2.5rem; color: #d1d5db;"></i>
+                <p>Henüz erişilebilir dosya bulunmuyor</p>
+              </div>
+            </div>
           </div>
         </template>
       </div>
@@ -616,7 +1016,7 @@
     <!-- Audio Recorder Modal -->
     <AudioRecorder
       v-model="showAudioRecorder"
-      @save="handleAudioSave"
+      @save="onAudioSave"
     />
   </div>
   </ClientOnly>
@@ -628,6 +1028,15 @@ import { useRouter } from 'vue-router'
 import { useParticipantAssessmentStore } from '~/stores/assessment'
 import { useToast } from 'primevue/usetoast'
 import { useConfirm } from 'primevue/useconfirm'
+import { useSectionTimer } from '~/composables/useSectionTimer'
+import { useAnswerHandling } from '~/composables/useAnswerHandling'
+import { useExerciseNavigation } from '~/composables/useExerciseNavigation'
+import { usePdfViewer } from '~/composables/usePdfViewer'
+import { usePolicyManagement } from '~/composables/usePolicyManagement'
+import { getSectionDuration, formatQuestionType, hasResponse } from '~/utils/assessment'
+import EmailView from '~/components/EmailView.vue'
+import EmailInboxView from '~/components/EmailInboxView.vue'
+import TeamBuildingView from '~/components/TeamBuildingView.vue'
 
 definePageMeta({
   layout: false, // Layout yok (tam ekran)
@@ -643,50 +1052,221 @@ const confirm = useConfirm()
 const appVersion = ref('1.0.0')
 
 // State
-const showWelcomeDialog = ref(false)
-const welcomeAcknowledged = ref(false)
-const exerciseAnswers = ref({})
-const audioRecordings = ref({}) // { exercise_uuid: Blob }
-const showAudioRecorder = ref(false)
+// const showWelcomeDialog = ref(false) - REMOVED
+// const welcomeAcknowledged = ref(false) - REMOVED
 
-// TTS State
-const isSpeaking = ref(false)
-const isSpeechLoading = ref(false)
-let speechSynthesis = null
-let currentUtterance = null
+// Intro & Countdown
+const introAcknowledged = ref(false) // Intro yönerge onayı
+const showCountdown = ref(false)
+const countdownValue = ref(3)
+
+// Kişi kartı popup
+const showCharacterPopup = ref(false)
+const selectedCharacter = ref(null)
+
+// Bölüm talimatları popup
+const showInstructionsPopup = ref(false)
+
+// LocalStorage'dan görülen talimatları yükle
+const loadSeenInstructions = () => {
+  try {
+    const saved = localStorage.getItem('seenInstructions')
+    return saved ? new Set(JSON.parse(saved)) : new Set()
+  } catch {
+    return new Set()
+  }
+}
+const seenInstructions = ref(loadSeenInstructions())
+
+const showCharacterDetail = (character) => {
+  selectedCharacter.value = character
+  showCharacterPopup.value = true
+}
+
+// Bölüm talimatları fonksiyonları
+const dismissInstructionsPopup = () => {
+  if (currentSection.value?.section_uuid) {
+    seenInstructions.value.add(currentSection.value.section_uuid)
+    // LocalStorage'a kaydet
+    try {
+      localStorage.setItem('seenInstructions', JSON.stringify([...seenInstructions.value]))
+    } catch (e) {
+      console.warn('seenInstructions kaydetme hatası:', e)
+    }
+  }
+  showInstructionsPopup.value = false
+}
+
+const openInstructionsPopup = () => {
+  showInstructionsPopup.value = true
+}
+
+// Bölüm talimatları olup olmadığını ve görülüp görülmediğini kontrol et
+const hasUnseenInstructions = computed(() => {
+  if (!currentSection.value?.section_description) return false
+  if (!currentSection.value?.section_uuid) return false
+  return !seenInstructions.value.has(currentSection.value.section_uuid)
+})
+
+// Bölümde talimat (açıklama) var mı?
+const hasInstructions = computed(() => {
+  return currentSection.value?.section_description && currentSection.value.section_description.trim() !== ''
+})
+
 const savingExercise = ref(null)
-const sectionTimer = ref(null)
-const remainingTime = ref(0)
 const currentSectionStartTime = ref(null)
 const currentExerciseStartTime = ref(null) // Her egzersiz için ayrı başlangıç zamanı
-const timerSyncInterval = ref(null) // Backend sync için
-const pdfViewerDialog = ref(false)
-const currentPdfUrl = ref(null)
-const currentPdfName = ref('')
-const pdfLoading = ref(false)
-const pdfFullscreen = ref(false)
-const currentExerciseIndex = ref(0) // Tek seferde bir egzersiz göster
 const showSectionCompletedMessage = ref(false)
 const completionMessage = ref({
   title: '',
   description: '',
   emoji: ''
 })
+const showSelfEvaluationDialog = ref(false)
+const selfEvaluationQuestions = ref([])
+const selfEvaluationAnswers = ref({})
+const showInventorySidebar = ref(false) // Bölüm envanteri sidebar visibility
 
 // Computed
 const currentSection = computed(() => store.currentSection)
 const currentSectionExercises = computed(() => store.currentSectionExercises)
-
-// Egzersiz cevaplandı mı kontrolü
-const isExerciseAnswered = (exerciseUuid) => {
-  return !!store.responses[exerciseUuid]
-}
 
 const totalDuration = computed(() => {
   return store.sections.reduce((total, section) => {
     return total + getSectionDuration(section)
   }, 0)
 })
+
+// Initialize Section Timer Composable
+const sectionTimerComposable = useSectionTimer({
+  onTimerComplete: async () => {
+    console.log('⏰ Timer bitti, otomatik kayıt yapılıyor')
+    
+    // Guard: Eğer zaten işlem yapılıyorsa tekrar çağrılmasın
+    if (savingExercise.value === 'AUTO_SAVING') {
+      console.log('⚠️ Zaten otomatik kayıt yapılıyor, tekrar çağrılmadı')
+      return
+    }
+    
+    savingExercise.value = 'AUTO_SAVING'
+    
+    toast.add({
+      severity: 'warn',
+      summary: 'Süre Doldu!',
+      detail: 'Bölüm süresi doldu. İlerlemeniz otomatik kaydedildi.',
+      life: 5000
+    })
+    
+    try {
+      // Otomatik kaydet ve sonraki bölüme geç
+      await autoSaveAndNext()
+    } finally {
+      savingExercise.value = null
+    }
+  },
+  savingExercise
+})
+
+// Destructure timer methods and state
+const { remainingTime, formattedTime, startTimer, stopTimer, resetTimer, resumeTimer } = sectionTimerComposable
+
+// Initialize Exercise Navigation Composable (needs to be before answer handling)
+const navigationComposable = useExerciseNavigation({
+  currentSection,
+  currentSectionExercises,
+  currentExerciseStartTime,
+  showSectionCompletedMessage,
+  completionMessage,
+  selfEvaluationQuestions,
+  selfEvaluationAnswers,
+  showSelfEvaluationDialog,
+  onStartTimer: startTimer,
+  onStopTimer: stopTimer,
+  onResetTimer: resetTimer,
+  onCleanupInventory: () => cleanupInventory(),
+  isExerciseAnswered: (uuid) => !!store.responses[uuid] // Temporary until answer handling is initialized
+})
+
+// Destructure navigation methods and state
+const {
+  currentExerciseIndex,
+  currentExercise,
+  completedExercisesCount,
+  canCompleteSection,
+  isLastExerciseInSection,
+  goToPreviousExercise,
+  goToNextExercise,
+  goToExercise,
+  selectSection,
+  isSectionLocked,
+  completeSectionAndNext,
+  proceedToNextSection,
+  completeAssessment
+} = navigationComposable
+
+// Initialize Answer Handling Composable (now currentExerciseIndex is available)
+const answerHandlingComposable = useAnswerHandling({
+  currentSection,
+  currentExerciseIndex,
+  currentSectionExercises,
+  savingExercise,
+  currentExerciseStartTime,
+  onSectionComplete: completeSectionAndNext
+})
+
+// Destructure answer handling methods and state
+const {
+  exerciseAnswers,
+  audioRecordings,
+  showAudioRecorder,
+  isExerciseAnswered,
+  handleAudioSave,
+  removeAudioRecording,
+  saveExerciseResponse,
+  confirmAndSave,
+  confirmAndSaveAndNext,
+  autoSaveAndNext,
+  loadExistingAnswers
+} = answerHandlingComposable
+
+// Update navigation's isExerciseAnswered with the real one from answer handling
+navigationComposable.isExerciseAnswered = isExerciseAnswered
+
+// Alias for template compatibility
+const onAudioSave = handleAudioSave
+
+// Initialize PDF Viewer Composable
+const pdfViewerComposable = usePdfViewer({
+  store
+})
+
+// Destructure PDF viewer methods and state
+const {
+  pdfViewerDialog,
+  currentPdfUrl,
+  currentPdfName,
+  pdfLoading,
+  pdfFullscreen,
+  viewDocument,
+  closePdfViewer,
+  togglePdfFullscreen,
+  cleanupPdfViewer
+} = pdfViewerComposable
+
+// Initialize Policy Management Composable
+const policyManagementComposable = usePolicyManagement({
+  store
+})
+
+// Destructure policy management methods and state
+const {
+  showPolicyDialog,
+  policiesAcknowledged,
+  allPoliciesApproved,
+  approvePolicies,
+  loadPolicies,
+  checkPolicies
+} = policyManagementComposable
 
 const firstSectionDuration = computed(() => {
   if (store.sections.length === 0) return 0
@@ -711,29 +1291,99 @@ const currentExerciseFiles = computed(() => {
   return files
 })
 
-const canCompleteSection = computed(() => {
-  const exercises = currentSectionExercises.value
-  if (!exercises || exercises.length === 0) return false
+const hasDocumentsInCurrentSection = computed(() => {
+  const section = store.hasStartedUI ? currentSection.value : store.sections[0]
+  if (!section) return false
   
-  // Tüm egzersizler cevaplanmış mı? (Info tipi egzersizler hariç)
-  return exercises.every(ex => {
-    if (ex.type === 'info') return true // Info egzersizleri için cevap zorunlu değil
-    return hasResponse(ex.exercise_uuid)
+  // Bölüm envanteri var mı?
+  const hasInventory = !!section.section_inventory_file
+  // Egzersiz dosyaları var mı?
+  const hasExerciseFiles = store.hasStartedUI && currentExerciseFiles.value.length > 0
+  
+  return hasInventory || hasExerciseFiles
+})
+
+const documentCountInCurrentSection = computed(() => {
+  return allAccessibleFiles.value.length
+})
+
+// Tüm erişilebilir dosyalar (tamamlanmış + aktif bölümler)
+const allAccessibleFiles = computed(() => {
+  const files = []
+  
+  if (!store.hasStartedUI) {
+    // Henüz başlamadıysa sadece ilk bölümün envanter dosyasını göster
+    const firstSection = store.sections[0]
+    if (firstSection?.section_inventory_file) {
+      files.push({
+        type: 'inventory',
+        section_title: firstSection.section_title,
+        section_uuid: firstSection.section_uuid,
+        file_path: firstSection.section_inventory_file,
+        file_name: 'Bölüm Envanteri'
+      })
+    }
+    return files
+  }
+  
+  // Tamamlanmış bölümlerin dosyaları
+  const completedSectionIds = store.completedSections || []
+  
+  store.sections.forEach(section => {
+    const isCompleted = completedSectionIds.includes(section.section_uuid)
+    const isCurrent = section.section_uuid === currentSection.value?.section_uuid
+    
+    // Sadece tamamlanmış veya aktif bölümlerin dosyalarını göster
+    if (isCompleted || isCurrent) {
+      // Bölüm envanter dosyası
+      if (section.section_inventory_file) {
+        files.push({
+          type: 'inventory',
+          section_title: section.section_title,
+          section_uuid: section.section_uuid,
+          file_path: section.section_inventory_file,
+          file_name: 'Bölüm Envanteri'
+        })
+      }
+      
+      // Egzersiz dosyaları - sectionDetails'dan al (cache)
+      const sectionDetail = store.sectionDetails[section.section_uuid]
+      const exercises = sectionDetail?.exercises || section.exercises || []
+      
+      exercises.forEach(exercise => {
+        // Normal egzersiz dosyaları (files dizisi)
+        const exerciseFiles = exercise.files || []
+        exerciseFiles.forEach(file => {
+          files.push({
+            type: 'exercise',
+            section_title: section.section_title,
+            section_uuid: section.section_uuid,
+            exercise_title: exercise.exercise_title,
+            file_path: file.path || file.file_path,
+            file_name: file.name || file.file_name
+          })
+        })
+        
+        // Sunum türü egzersizler için doğrudan file_path
+        if (exercise.exercise_type === 'presentation' && exercise.file_path) {
+          files.push({
+            type: 'presentation',
+            section_title: section.section_title,
+            section_uuid: section.section_uuid,
+            exercise_title: exercise.exercise_title,
+            file_path: exercise.file_path,
+            file_name: exercise.file_name || 'Sunum Dosyası'
+          })
+        }
+      })
+    }
   })
+  
+  return files
 })
 
 const canComplete = computed(() => {
   return store.overallProgress === 100
-})
-
-const currentExercise = computed(() => {
-  if (!currentSectionExercises.value || currentSectionExercises.value.length === 0) return null
-  return currentSectionExercises.value[currentExerciseIndex.value]
-})
-
-const completedExercisesCount = computed(() => {
-  if (!currentSectionExercises.value) return 0
-  return currentSectionExercises.value.filter(ex => hasResponse(ex.exercise_uuid)).length
 })
 
 const sectionProgressPercentage = computed(() => {
@@ -747,483 +1397,127 @@ const nextSectionExists = computed(() => {
   return currentIndex >= 0 && currentIndex < store.sections.length - 1
 })
 
-const isLastExerciseInSection = computed(() => {
-  if (!currentSectionExercises.value) return false
-  return currentExerciseIndex.value === currentSectionExercises.value.length - 1
-})
-
 // Methods
 
-// Navigasyon Fonksiyonları
-const goToPreviousExercise = () => {
-  if (currentExerciseIndex.value > 0) {
-    currentExerciseIndex.value--
-    window.scrollTo({ top: 0, behavior: 'smooth' })
-  }
+// Wrapper for hasResponse util to provide store
+const hasExerciseResponse = (exerciseUuid) => {
+  return hasResponse(store, exerciseUuid)
 }
 
-const goToNextExercise = () => {
-  if (currentExerciseIndex.value < currentSectionExercises.value.length - 1) {
-    currentExerciseIndex.value++
-    window.scrollTo({ top: 0, behavior: 'smooth' })
-  }
-}
-const getSectionDuration = (section) => {
-  // 1. Backend'den gelen summary duration'ı kullan (GÜVENLİ)
-  if (section.section_duration !== undefined) {
-    return parseInt(section.section_duration || 0)
+// Editor placeholder - egzersiz türüne göre
+const getEditorPlaceholder = (exercise) => {
+  if (isExerciseAnswered(exercise.exercise_uuid)) {
+    return exercise.exercise_type === 'analysis' 
+      ? 'Bu analiz raporu kaydedildi ve değiştirilemez.'
+      : 'Bu cevap kaydedildi ve değiştirilemez.'
   }
   
-  // 2. Detay yüklenmişse exercises'dan hesapla (fallback)
-  if (!section.exercises || section.exercises.length === 0) return 0
-  
-  return section.exercises.reduce((total, exercise) => {
-    const duration = parseInt(exercise.exercise_duration || exercise.duration || 0)
-    return total + duration
-  }, 0)
-}
-
-const formatTime = (seconds) => {
-  const mins = Math.floor(seconds / 60)
-  const secs = seconds % 60
-  return `${mins}:${secs.toString().padStart(2, '0')}`
-}
-
-// Welcome Dialog Functions
-const closeWelcomeDialog = () => {
-  if (!welcomeAcknowledged.value) {
-    toast.add({
-      severity: 'warn',
-      summary: 'Uyarı',
-      detail: 'Lütfen önce "Okudum, anladım" kutucuğunu işaretleyin.',
-      life: 3000
-    })
-    return
+  if (exercise.exercise_type === 'analysis') {
+    return 'Analiz raporunuzu buraya yazınız. Bulgularınızı, değerlendirmelerinizi ve önerilerinizi detaylı şekilde açıklayınız...'
   }
   
-  showWelcomeDialog.value = false
-  // LocalStorage'a kaydedelim ki tekrar açılmasın
-  localStorage.setItem(`welcome_acknowledged_${store.projectUUID}`, 'true')
+  return 'Düşüncelerinizi buraya yazabilirsiniz...'
 }
 
 const startWorkspace = async () => {
-  store.hasStartedUI = true
-  
-  // İlk bölümü seç
-  if (store.sections.length > 0) {
-    currentExerciseIndex.value = 0 // İlk egzersize git
-    currentExerciseStartTime.value = Date.now() // İlk egzersiz başlangıç zamanı
-    store.setCurrentSection(store.sections[0].section_uuid)
-    await startSectionTimer(store.sections[0])
+  // Policy check
+  if (!checkPolicies()) {
+    return
   }
-  
-  // Assessment'ı backend'de başlat (sadece ilk kez)
-  if (!store.startedAt) {
-    await store.startAssessment()
-  }
-}
 
-const startSectionTimer = async (section) => {
-  stopSectionTimer() // Mevcut timer'ı durdur
+  // Countdown
+  showCountdown.value = true
+  countdownValue.value = 3
   
-  console.log('🚀 Bölüm timer başlatılıyor:', section.section_title)
-  console.log('📌 Section UUID:', section.section_uuid)
-  
-  // 1. Önce bölüm detaylarını yükle (eğer yüklenmemişse)
-  if (!store.sectionDetails[section.section_uuid]) {
-    console.log('📥 Bölüm detayları yükleniyor...')
-    const detailsResult = await store.fetchSectionDetails(section.section_uuid)
-    if (!detailsResult.success) {
-      console.error('❌ Bölüm detayları yüklenemedi:', detailsResult.error)
-      toast.add({
-        severity: 'error',
-        summary: 'Hata',
-        detail: 'Bölüm yüklenemedi: ' + detailsResult.error,
-        life: 3000
-      })
-      return
-    }
-  }
-  
-  // 2. Exercises bilgisi şimdi yüklendi
-  const sectionDetail = store.sectionDetails[section.section_uuid]
-  console.log('📝 Section Exercises:', sectionDetail?.exercises?.length || 0)
-  
-  // Exercises duration kontrolü
-  if (sectionDetail?.exercises) {
-    const totalDuration = sectionDetail.exercises.reduce((sum, ex) => sum + (parseInt(ex.exercise_duration || ex.duration || 0)), 0)
-    console.log('⏱️ Toplam beklenen süre (frontend):', totalDuration, 'dakika')
-  }
-  
-  // 3. Backend'e bölüm başlatma isteği gönder
-  const result = await store.startSectionOnBackend(section.section_uuid)
-  
-  if (!result.success) {
-    console.error('Section başlatılamadı:', result.error)
-    toast.add({
-      severity: 'error',
-      summary: 'Hata',
-      detail: 'Bölüm başlatılamadı',
-      life: 3000
-    })
-    return
-  }
-  
-  console.log('✅ Backend bölüm başlatıldı, süre bilgisi alınıyor...')
-  
-  // Backend'den gerçek kalan süreyi al VE BEKLEBeklemeyi garanti et
-  const timeResult = await store.fetchRemainingTime()
-  
-  console.log('📥 Backend response:', timeResult)
-  
-  if (!timeResult.success) {
-    console.error('❌ Süre bilgisi alınamadı:', timeResult.error)
-    toast.add({
-      severity: 'error',
-      summary: 'Hata',
-      detail: 'Süre bilgisi alınamadı',
-      life: 3000
-    })
-    return
-  }
-  
-  // Süreyi set et
-  remainingTime.value = timeResult.data.remaining_seconds
-  console.log('⏱️ Başlangıç süresi set edildi:', remainingTime.value, 'saniye')
-  console.log('📊 Backend data:', {
-    total_duration: timeResult.data.total_duration,
-    elapsed_seconds: timeResult.data.elapsed_seconds,
-    remaining_seconds: timeResult.data.remaining_seconds
-  })
-  
-  // Eğer süre 0 veya negatifse başlatma
-  if (remainingTime.value <= 0) {
-    console.warn('⚠️ Süre zaten bitmiş, timer başlatılmıyor')
-    onTimerEnd()
-    return
-  }
-  
-  // Şimdi timer'ı başlat (süre garantili pozitif)
-  sectionTimer.value = setInterval(() => {
-    if (remainingTime.value > 0) {
-      remainingTime.value--
-    } else {
-      // Süre bitti
-      onTimerEnd()
+  const timer = setInterval(async () => {
+    countdownValue.value--
+    if (countdownValue.value <= 0) {
+      clearInterval(timer)
+      showCountdown.value = false
+      
+      store.hasStartedUI = true
+      
+      // İlk bölüme geç
+      if (store.sections.length > 0) {
+        const firstSection = store.sections[0]
+        // currentExerciseIndex ve timer ayarları selectSection içinde veya burada yapılabilir
+        currentExerciseIndex.value = 0 
+        currentExerciseStartTime.value = Date.now()
+        
+        // selectSection kullanarak geçiş yap
+        await selectSection(firstSection.section_uuid, 0)
+      }
+      
+      // Assessment'ı backend'de başlat (sadece ilk kez)
+      if (!store.startedAt) {
+        await store.startAssessment()
+      }
     }
   }, 1000)
-  
-  console.log('✅ Timer başlatıldı, her 10 saniyede sync olacak')
-  
-  // Her 10 saniyede backend ile senkronize et
-  timerSyncInterval.value = setInterval(async () => {
-    await syncTimerWithBackend()
-  }, 10000) // 10 saniye
 }
 
-const syncTimerWithBackend = async () => {
-  const result = await store.fetchRemainingTime()
-  
-  if (result.success) {
-    remainingTime.value = result.data.remaining_seconds
-    
-    // Süre bittiyse backend'den bildirim geldi
-    if (result.data.time_expired && remainingTime.value <= 0) {
-      onTimerEnd()
-    }
-    
-    console.log('Timer backend ile senkronize edildi:', result.data.remaining_seconds, 'saniye')
-  } else {
-    console.error('Timer senkronizasyon hatası:', result.error)
-  }
+// Bölüm Envanteri Sidebar Toggle
+const toggleInventorySidebar = () => {
+  showInventorySidebar.value = !showInventorySidebar.value
 }
 
-const stopSectionTimer = () => {
-  if (sectionTimer.value) {
-    clearInterval(sectionTimer.value)
-    sectionTimer.value = null
-  }
+// Envanter temizleme (bölüm değiştiğinde)
+const cleanupInventory = () => {
+  console.log('🧹 Envanter temizleniyor...')
   
-  if (timerSyncInterval.value) {
-    clearInterval(timerSyncInterval.value)
-    timerSyncInterval.value = null
-  }
+  // PDF viewer'ı kapat
+  cleanupPdfViewer()
+  
+  // Sidebar'ı kapat (opsiyonel - yeni bölümde dosya varsa watch açacak)
+  // showInventorySidebar.value = false
+  
+  console.log('✅ Envanter temizlendi')
 }
 
-const onTimerEnd = async () => {
-  console.log('⏰ Timer bitti, otomatik kayıt yapılıyor')
+// Öz-değerlendirme cevaplarını kaydet
+const saveSelfEvaluationAnswers = async () => {
+  // Tüm zorunlu sorular cevaplandı mı kontrol et
+  const requiredQuestions = selfEvaluationQuestions.value.filter(q => q.is_required)
+  const unansweredRequired = requiredQuestions.filter(q => !selfEvaluationAnswers.value[q.id])
   
-  stopSectionTimer()
-  
-  // Guard: Eğer zaten işlem yapılıyorsa tekrar çağrılmasın
-  if (savingExercise.value === 'AUTO_SAVING') {
-    console.log('⚠️ Zaten otomatik kayıt yapılıyor, tekrar çağrılmadı')
-    return
-  }
-  
-  savingExercise.value = 'AUTO_SAVING'
-  
-  toast.add({
-    severity: 'warn',
-    summary: 'Süre Doldu!',
-    detail: 'Bölüm süresi doldu. İlerlemeniz otomatik kaydedildi.',
-    life: 5000
-  })
-  
-  try {
-    // Otomatik kaydet ve sonraki bölüme geç
-    await autoSaveAndNext()
-  } finally {
-    savingExercise.value = null
-  }
-}
-
-const autoSaveAndNext = async () => {
-  // Cevaplanmış egzersizleri kaydet
-  const exercises = currentSectionExercises.value
-  for (const exercise of exercises) {
-    if (exerciseAnswers.value[exercise.exercise_uuid]) {
-      await saveExerciseResponse(exercise, true) // Silent save
-    }
-  }
-  
-  // Bölümü tamamla ve sonrakine geç
-  await completeSectionAndNext()
-}
-
-const isSectionLocked = (index) => {
-  // İlk bölüm her zaman açık
-  if (index === 0) return false
-  
-  // Önceki bölüm tamamlanmış mı kontrol et
-  const previousSection = store.sections[index - 1]
-  return !store.isSectionCompleted(previousSection.section_uuid)
-}
-
-const selectSection = async (sectionId, index) => {
-  if (!store.hasStartedUI) {
-    toast.add({
-      severity: 'info',
-      summary: 'Henüz Başlamadınız',
-      detail: 'Lütfen önce "Başla" butonuna tıklayın',
-      life: 3000
-    })
-    return
-  }
-  
-  // Tamamlanmış bölümlere geri dönüş engeli
-  if (store.isSectionCompleted(sectionId)) {
-    toast.add({
-      severity: 'info',
-      summary: 'Bölüm Tamamlandı',
-      detail: 'Tamamlanmış bölümlere geri dönemezsiniz',
-      life: 3000
-    })
-    return
-  }
-  
-  if (isSectionLocked(index)) {
+  if (unansweredRequired.length > 0) {
     toast.add({
       severity: 'warn',
-      summary: 'Bölüm Kilitli',
-      detail: 'Önceki bölümü tamamlayarak bu bölümü açabilirsiniz',
+      summary: 'Eksik Cevaplar',
+      detail: 'Lütfen tüm zorunlu soruları cevaplayın',
       life: 3000
     })
     return
   }
   
-  stopSectionTimer()
-  currentExerciseIndex.value = 0 // Yeni bölümde ilk egzersizden başla
-  store.setCurrentSection(sectionId)
-  
-  const section = store.sections.find(s => s.section_uuid === sectionId)
-  if (section) {
-    await startSectionTimer(section)
-  }
-}
-
-const viewDocument = async (filePath, fileName = 'Döküman') => {
   try {
-    // Loading başlat
-    pdfLoading.value = true
-    
-    // PDF görüntüleme - Güvenli token ile Split View'da göster
-    const config = useRuntimeConfig()
-    const baseDomain = config.public.apiBaseUrl
-    
-    // file_path'i normalize et
-    let normalizedPath = filePath
-    
-    // Başında / yoksa ekle
-    if (!normalizedPath.startsWith('/')) {
-      normalizedPath = '/' + normalizedPath
-    }
-    
-    // /uploads ile başlıyorsa /writable/uploads yap
-    if (normalizedPath.startsWith('/uploads/')) {
-      normalizedPath = '/writable' + normalizedPath
-    }
-    
-    // Güvenli token generate et
     const ApiService = (await import('~/utils/api')).default
-    const api = new ApiService()
+    const api = new ApiService(store.sessionToken)
     
-    const tokenResponse = await api.generateDocumentToken(
-      store.participantId,
-      store.projectId,
-      normalizedPath
-    )
+    // Backend'e cevapları gönder
+    await api.post('/assessment/section-evaluation', {
+      section_uuid: store.currentSectionId,
+      answers: selfEvaluationAnswers.value
+    })
     
-    if (tokenResponse.status === 'success') {
-      // Token'lı URL ile PDF aç
-      currentPdfUrl.value = tokenResponse.view_url
-      currentPdfName.value = fileName
-      pdfViewerDialog.value = true
-      
-      console.log('✅ PDF viewer açıldı:', tokenResponse.view_url)
-    } else {
-      toast.add({
-        severity: 'error',
-        summary: 'Hata',
-        detail: 'PDF yüklenirken bir hata oluştu',
-        life: 3000
-      })
-    }
+    // Dialog'u kapat ve completion message göster
+    showSelfEvaluationDialog.value = false
+    showSectionCompletedMessage.value = true
+    
+    toast.add({
+      severity: 'success',
+      summary: 'Kaydedildi',
+      detail: 'Öz-değerlendirmeniz başarıyla kaydedildi',
+      life: 2000
+    })
   } catch (error) {
-    console.error('PDF yükleme hatası:', error)
+    console.error('Öz-değerlendirme kaydetme hatası:', error)
     toast.add({
       severity: 'error',
       summary: 'Hata',
-      detail: error.message || 'PDF yüklenemedi',
+      detail: 'Cevaplar kaydedilemedi, lütfen tekrar deneyin',
       life: 3000
     })
-  } finally {
-    // Loading bitir
-    pdfLoading.value = false
-  }
-}
-
-const closePdfViewer = () => {
-  pdfViewerDialog.value = false
-  currentPdfUrl.value = null
-  currentPdfName.value = ''
-  pdfFullscreen.value = false
-}
-
-// ESC tuşu ile PDF viewer'ı kapat
-const handlePdfEscape = (e) => {
-  if (e.key === 'Escape' && pdfViewerDialog.value) {
-    e.preventDefault()
-    closePdfViewer()
-  }
-}
-
-// Tam ekran toggle
-const togglePdfFullscreen = () => {
-  pdfFullscreen.value = !pdfFullscreen.value
-}
-
-const hasResponse = (exerciseUuid) => {
-  return !!store.getExerciseResponse(exerciseUuid)
-}
-
-const proceedToNextSection = async () => {
-  showSectionCompletedMessage.value = false
-  
-  const currentIndex = store.sections.findIndex(s => s.section_uuid === store.currentSectionId)
-  
-  if (currentIndex < store.sections.length - 1) {
-    // Sonraki bölüme geç
-    const nextSection = store.sections[currentIndex + 1]
-    currentExerciseIndex.value = 0 // Egzersiz index'ini sıfırla
-    currentExerciseStartTime.value = Date.now() // Yeni bölümün ilk egzersiz zamanı
-    store.setCurrentSection(nextSection.section_uuid)
-    await startSectionTimer(nextSection)
-  } else {
-    // Tüm bölümler tamamlandı (completeAssessment zaten completeSectionAndNext içinde çağrıldı)
-    
-    toast.add({
-      severity: 'success',
-      summary: 'Tebrikler! 🎊',
-      detail: 'Tüm bölümleri başarıyla tamamladınız!',
-      life: 3000
-    })
-    
-    // Tamamlanma sayfasına yönlendir
-    setTimeout(() => {
-      router.push('/assessment/completed')
-    }, 2000)
-  }
-}
-
-const goToExercise = (index) => {
-  if (index >= 0 && index < currentSectionExercises.value.length) {
-    currentExerciseIndex.value = index
-  }
-}
-
-// Confirm dialog ile kaydet
-const confirmAndSave = async (exercise) => {
-  const answer = exerciseAnswers.value[exercise.exercise_uuid]
-  
-  // Info tipi egzersizler için cevap zorunlu değil
-  if (exercise.type === 'info' || exercise.exercise_type === 'info') {
-    await saveAndNext(exercise)
-    return
-  }
-  
-  // Cevap boşsa uyar
-  if (!answer || answer.trim() === '') {
-    toast.add({
-      severity: 'warn',
-      summary: 'Uyarı',
-      detail: 'Lütfen bir cevap giriniz',
-      life: 3000
-    })
-    return
-  }
-  
-  // Confirm dialog göster
-  confirm.require({
-    message: 'Bu cevabınızı kaydettikten sonra tekrar düzenleyemezsiniz. Devam etmek istiyor musunuz?',
-    header: 'Cevabı Kaydet',
-    icon: 'pi pi-exclamation-triangle',
-    acceptLabel: 'Evet, Kaydet',
-    rejectLabel: 'İptal',
-    acceptClass: 'p-button-success',
-    rejectClass: 'p-button-secondary p-button-outlined',
-    accept: async () => {
-      await saveAndNext(exercise)
-    },
-    reject: () => {
-      // İptal edildi, hiçbir şey yapma
-    }
-  })
-}
-
-const saveAndNext = async (exercise) => {
-  await saveExerciseResponse(exercise, false)
-  
-  // Son egzersiz mi kontrol et
-  const isLastExercise = currentExerciseIndex.value === currentSectionExercises.value.length - 1
-  
-  if (isLastExercise) {
-    // Son egzersizse bölümü otomatik tamamla
-    toast.add({
-      severity: 'success',
-      summary: 'Harika! 🎉',
-      detail: 'Tüm egzersizleri tamamladınız. Bölüm tamamlanıyor...',
-      life: 2000
-    })
-    
-    // 1 saniye bekle, sonra bölümü tamamla
-    setTimeout(async () => {
-      await completeSectionAndNext()
-    }, 1000)
-  } else {
-    // Sonraki egzersize geç
-    currentExerciseIndex.value++
-    window.scrollTo({ top: 0, behavior: 'smooth' })
   }
 }
 
@@ -1261,118 +1555,317 @@ const markInfoAsRead = async (exercise) => {
   }
 }
 
-const formatQuestionType = (type) => {
-  const types = {
-    'multiple_choice': 'Çoktan Seçmeli',
-    'essay': 'Kompozisyon',
-    'practice': 'Uygulama',
-    'analysis': 'Analiz',
-    'info': 'Bilgilendirme'
+// Sunum egzersizi için PDF dosyasını al
+const getPresentationFile = (exercise) => {
+  if (!exercise) return null
+  
+  // Egzersiz dosyalarından ilk PDF'i al
+  if (exercise.files && Array.isArray(exercise.files) && exercise.files.length > 0) {
+    return {
+      file_path: exercise.files[0].path || exercise.files[0].file_path,
+      file_name: exercise.files[0].name || exercise.files[0].file_name || 'Sunum'
+    }
   }
-  return types[type] || type
+  
+  // Alternatif: file_path direkt olarak tanımlanmış olabilir
+  if (exercise.file_path) {
+    return {
+      file_path: exercise.file_path,
+      file_name: exercise.file_name || 'Sunum'
+    }
+  }
+  
+  return null
 }
 
-// Ses Kayıt Fonksiyonları
-const handleAudioSave = (audioBlob) => {
-  if (currentExercise.value) {
-    audioRecordings.value[currentExercise.value.exercise_uuid] = audioBlob
-    toast.add({
-      severity: 'success',
-      summary: 'Başarılı',
-      detail: 'Ses kaydı eklendi',
-      life: 2000
-    })
+// HTML içeriğini strip et (güvenli metin gösterimi)
+const stripHtml = (html) => {
+  if (!html) return ''
+  // HTML taglarını kaldır ve entity'leri decode et
+  const doc = new DOMParser().parseFromString(html, 'text/html')
+  return doc.body.textContent || ''
+}
+
+// PDF Slide Show State
+const pdfCanvas = ref(null)
+const slideContainer = ref(null)
+const currentSlide = ref(1)
+const totalSlides = ref(1)
+const pdfSlideLoading = ref(false)
+const isSlideTransitioning = ref(false)
+const isSlideFullscreen = ref(false)
+const slideDirection = ref('left')
+const showPresentationNotification = ref(false)
+const presentationNotificationDismissed = ref(false)
+let pdfDoc = null
+let pdfjsLib = null
+
+// Sunum bildirimi mesajı - önce egzersiz instructions, yoksa section description, yoksa genel mesaj
+const presentationNotificationMessage = computed(() => {
+  // Egzersiz talimatları varsa onu öncelikli göster
+  if (currentExercise.value?.instructions && currentExercise.value.instructions.trim() !== '') {
+    return currentExercise.value.instructions
+  }
+  // Yoksa bölüm açıklamasını göster
+  if (currentSection.value?.section_description) {
+    return currentSection.value.section_description
+  }
+  return 'Lütfen sunumun tamamını inceleyerek bölümü tamamlayınız.'
+})
+
+// Sunum bildirimini kapat
+const dismissPresentationNotification = () => {
+  showPresentationNotification.value = false
+  presentationNotificationDismissed.value = true
+  // Egzersiz talimatları görüldü olarak işaretle
+  if (currentExercise.value?.exercise_uuid) {
+    seenInstructions.value.add(currentExercise.value.exercise_uuid)
   }
 }
 
-const removeAudioRecording = (exerciseUuid) => {
-  delete audioRecordings.value[exerciseUuid]
-  toast.add({
-    severity: 'info',
-    summary: 'Bilgi',
-    detail: 'Ses kaydı kaldırıldı',
-    life: 2000
+// Tam ekran toggle
+const toggleSlideFullscreen = () => {
+  isSlideFullscreen.value = !isSlideFullscreen.value
+  
+  // Tam ekrandan çıkış için ESC tuşunu dinle
+  if (isSlideFullscreen.value) {
+    document.addEventListener('keydown', handleFullscreenEscape)
+    // Body scroll'u kapat
+    document.body.style.overflow = 'hidden'
+  } else {
+    document.removeEventListener('keydown', handleFullscreenEscape)
+    document.body.style.overflow = ''
+  }
+  
+  // Canvas'ı yeniden boyutlandır
+  nextTick(() => {
+    if (pdfDoc) {
+      renderPage(currentSlide.value)
+    }
   })
 }
 
-const saveExerciseResponse = async (exercise, silent = false) => {
-  // Zaten kaydedilmiş cevaplara izin verme
-  if (isExerciseAnswered(exercise.exercise_uuid)) {
-    if (!silent) {
-      toast.add({
-        severity: 'info',
-        summary: 'Bilgilendirme',
-        detail: 'Bu egzersiz için cevabınız zaten kaydedildi',
-        life: 3000
-      })
-    }
-    return
+const handleFullscreenEscape = (e) => {
+  if (e.key === 'Escape' && isSlideFullscreen.value) {
+    toggleSlideFullscreen()
   }
-  
-  const answer = exerciseAnswers.value[exercise.exercise_uuid]
-  
-  // Info tipi egzersizler için cevap zorunlu değil
-  if (exercise.type === 'info' || exercise.exercise_type === 'info') {
-    // Info egzersizi için otomatik "görüldü" işareti
-    store.responses[exercise.exercise_uuid] = {
-      exercise_uuid: exercise.exercise_uuid,
-      answer_value: 'INFO_VIEWED',
-      answer_text: 'Bilgilendirme görüntülendi'
-    }
-    return
-  }
-  
-  if (!answer || answer.trim() === '') {
-    if (!silent) {
-      toast.add({
-        severity: 'warn',
-        summary: 'Uyarı',
-        detail: 'Lütfen bir cevap giriniz',
-        life: 3000
-      })
-    }
-    return
-  }
+}
 
-  savingExercise.value = exercise.exercise_uuid
+// PDF.js'i yükle
+const loadPdfJs = async () => {
+  if (pdfjsLib) return pdfjsLib
+  
+  // PDF.js CDN'den yükle
+  if (typeof window !== 'undefined' && !window.pdfjsLib) {
+    await new Promise((resolve, reject) => {
+      const script = document.createElement('script')
+      script.src = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js'
+      script.onload = resolve
+      script.onerror = reject
+      document.head.appendChild(script)
+    })
+  }
+  
+  pdfjsLib = window.pdfjsLib
+  pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js'
+  
+  return pdfjsLib
+}
 
+// PDF sayfasını canvas'a render et
+const renderPage = async (pageNum) => {
+  if (!pdfDoc || !pdfCanvas.value) return
+  
+  pdfSlideLoading.value = true
+  
   try {
-    const responseData = {
+    const page = await pdfDoc.getPage(pageNum)
+    const canvas = pdfCanvas.value
+    const ctx = canvas.getContext('2d')
+    
+    // Container boyutuna göre scale hesapla
+    const containerWidth = slideContainer.value?.clientWidth || 800
+    const containerHeight = slideContainer.value?.clientHeight || 500
+    
+    const viewport = page.getViewport({ scale: 1 })
+    const scaleX = (containerWidth - 40) / viewport.width
+    const scaleY = (containerHeight - 40) / viewport.height
+    const scale = Math.min(scaleX, scaleY, 2) // Max 2x scale
+    
+    const scaledViewport = page.getViewport({ scale })
+    
+    canvas.width = scaledViewport.width
+    canvas.height = scaledViewport.height
+    
+    await page.render({
+      canvasContext: ctx,
+      viewport: scaledViewport
+    }).promise
+    
+  } catch (error) {
+    console.error('Sayfa render hatası:', error)
+  } finally {
+    pdfSlideLoading.value = false
+  }
+}
+
+// Sonraki slide
+const nextSlide = () => {
+  if (currentSlide.value < totalSlides.value) {
+    slideDirection.value = 'slide-left'
+    currentSlide.value++
+  }
+}
+
+// Önceki slide
+const prevSlide = () => {
+  if (currentSlide.value > 1) {
+    slideDirection.value = 'slide-right'
+    currentSlide.value--
+  }
+}
+
+// Belirli slide'a git
+const goToSlide = (n) => {
+  if (n >= 1 && n <= totalSlides.value && n !== currentSlide.value) {
+    slideDirection.value = n > currentSlide.value ? 'slide-left' : 'slide-right'
+    currentSlide.value = n
+  }
+}
+
+// Klavye navigasyonu
+const handleSlideKeyboard = (e) => {
+  if (currentExercise.value?.exercise_type !== 'presentation') return
+  
+  if (e.key === 'ArrowRight' || e.key === ' ') {
+    e.preventDefault()
+    nextSlide()
+  } else if (e.key === 'ArrowLeft') {
+    e.preventDefault()
+    prevSlide()
+  }
+}
+
+// Slide değiştiğinde animasyonlu render et
+watch(currentSlide, async (newPage) => {
+  if (pdfDoc && pdfCanvas.value) {
+    // Geçiş animasyonu başlat
+    isSlideTransitioning.value = true
+    
+    // Kısa bir gecikme ile animasyon efekti
+    await new Promise(resolve => setTimeout(resolve, 150))
+    
+    // Sayfayı render et
+    await renderPage(newPage)
+    
+    // Animasyonu bitir
+    isSlideTransitioning.value = false
+  }
+})
+
+// Sunum egzersizi değiştiğinde PDF'i yükle ve bildirimi göster
+watch(currentExercise, async (exercise) => {
+  if (exercise?.exercise_type === 'presentation') {
+    // Bildirim durumunu sıfırla ve göster
+    presentationNotificationDismissed.value = false
+    showPresentationNotification.value = true
+    
+    const file = getPresentationFile(exercise)
+    if (file) {
+      try {
+        pdfSlideLoading.value = true
+        currentSlide.value = 1
+        totalSlides.value = 1
+        pdfDoc = null
+        
+        // PDF URL'ini al
+        const ApiService = (await import('~/utils/api')).default
+        const api = new ApiService()
+        
+        let normalizedPath = file.file_path
+        if (!normalizedPath.startsWith('/')) {
+          normalizedPath = '/' + normalizedPath
+        }
+        if (normalizedPath.startsWith('/uploads/')) {
+          normalizedPath = '/writable' + normalizedPath
+        }
+        
+        const tokenResponse = await api.generateDocumentToken(
+          store.participantId,
+          store.projectId,
+          normalizedPath
+        )
+        
+        if (tokenResponse.status === 'success') {
+          // PDF.js ile yükle
+          await loadPdfJs()
+          
+          const loadingTask = pdfjsLib.getDocument(tokenResponse.view_url)
+          pdfDoc = await loadingTask.promise
+          totalSlides.value = pdfDoc.numPages
+          
+          // İlk sayfayı render et
+          await nextTick()
+          await renderPage(1)
+        }
+      } catch (error) {
+        console.error('Sunum PDF yükleme hatası:', error)
+        pdfDoc = null
+        totalSlides.value = 1
+      } finally {
+        pdfSlideLoading.value = false
+      }
+    } else {
+      pdfDoc = null
+      currentSlide.value = 1
+      totalSlides.value = 1
+    }
+  } else {
+    pdfDoc = null
+    currentSlide.value = 1
+    totalSlides.value = 1
+  }
+}, { immediate: true })
+
+// Keyboard listener
+onMounted(() => {
+  window.addEventListener('keydown', handleSlideKeyboard)
+})
+
+onBeforeUnmount(() => {
+  window.removeEventListener('keydown', handleSlideKeyboard)
+})
+
+// Sunum egzersizini görüntülenmiş olarak işaretle
+const markPresentationAsViewed = async (exercise) => {
+  savingExercise.value = exercise.exercise_uuid
+  
+  try {
+    const result = await store.saveResponse({
       section_uuid: store.currentSectionId || currentSection.value?.section_uuid,
       exercise_uuid: exercise.exercise_uuid,
       question_id: null,
-      answer_value: answer,
-      answer_text: answer,
-      time_spent: currentExerciseStartTime.value ? Math.floor((Date.now() - currentExerciseStartTime.value) / 1000) : 0
-    }
-
-    // Ses kaydı varsa ekle
-    const audioBlob = audioRecordings.value[exercise.exercise_uuid]
+      answer_value: 'PRESENTATION_VIEWED',
+      answer_text: 'Sunum görüntülendi',
+      time_spent: currentExerciseStartTime.value ? Math.floor((Date.now() - currentExerciseStartTime.value) / 1000) : 10
+    })
     
-    const result = await store.saveResponse(responseData, audioBlob)
-
     if (result.success) {
-      if (!silent) {
-        toast.add({
-          severity: 'success',
-          summary: 'Harika! 🎉',
-          detail: 'Cevabınız başarıyla kaydedildi',
-          life: 2000
-        })
+      // Son egzersizse bölümü tamamla
+      if (currentExerciseIndex.value >= currentSectionExercises.value.length - 1) {
+        // Bölümü tamamla
+        await completeSectionAndNext()
+      } else {
+        // Sonraki egzersize geç
+        currentExerciseIndex.value++
       }
-    } else {
-      toast.add({
-        severity: 'error',
-        summary: 'Hata',
-        detail: result.error,
-        life: 3000
-      })
     }
   } catch (error) {
+    console.error('Presentation exercise marking error:', error)
     toast.add({
       severity: 'error',
       summary: 'Hata',
-      detail: 'Cevap kaydedilemedi',
+      detail: 'İşlem sırasında bir hata oluştu',
       life: 3000
     })
   } finally {
@@ -1380,259 +1873,45 @@ const saveExerciseResponse = async (exercise, silent = false) => {
   }
 }
 
-const completeSectionAndNext = async () => {
-  const currentIndex = store.sections.findIndex(s => s.section_uuid === store.currentSectionId)
-  
-  // Timer'ı durdur ve sıfırla
-  stopSectionTimer()
-  remainingTime.value = 0
-  
-  // Backend'e bölüm tamamlama isteği gönder
-  const result = await store.completeSection(store.currentSectionId)
-  
-  if (!result.success) {
-    console.error('Bölüm tamamlama hatası:', result.error)
-    toast.add({
-      severity: 'error',
-      summary: 'Hata',
-      detail: 'Bölüm tamamlanırken bir hata oluştu',
-      life: 3000
-    })
-    return
-  }
-  
-  // Backend'den gelen data
-  const responseData = result.data || {}
-  const isLastSection = responseData.is_last_section || false
-  const customMessage = isLastSection 
-    ? responseData.final_completion_message 
-    : responseData.completion_message
-  
-  // Son bölüm için özel tebrik mesajları
-  const finalMessages = [
-    {
-      title: 'Tebrikler!',
-      description: 'Bir adım daha yaklaştınız hedeﬁnize! Bizce şimdi toplam, belli bir şeyler atıştırın, hazır olduğunuzda devam ederiz.',
-      emoji: '🎯'
-    },
-    {
-      title: 'Muhteşemsiniz!',
-      description: 'Tüm değerlendirmeyi başarıyla tamamladınız! İnanılmaz bir iş çıkardınız. Emeğinize sağlık!',
-      emoji: '🏆'
-    },
-    {
-      title: 'Harika Bir Performans!',
-      description: 'Değerlendirmeyi sonuna kadar getirdiniz! Gösterdiğiniz özen ve çaba takdire şayan. Harikasınız!',
-      emoji: '⭐'
-    },
-    {
-      title: 'Başardınız!',
-      description: 'Son bölümü de tamamladınız! Şimdi rahat bir nefes alabilirsiniz. Gerisi bizden, harika sonuçlarınız hazır olduğunda devam ederiz.',
-      emoji: '🎊'
-    },
-    {
-      title: 'Mükemmel!',
-      description: 'Tüm süreç boyunca harika bir performans sergilemişsiniz! Değerlendirme tamamlandı, sonuçlarınızı merakla bekliyoruz.',
-      emoji: '🌟'
-    }
-  ]
-  
-  // Ara bölümler için motivasyonel mesajlar
-  const motivationalMessages = [
-    {
-      title: 'Harika İş Çıkardınız!',
-      description: 'Bir bölümü daha bitirdiniz bile! Şimdi bir kahve molasını hak ettiniz. Kendinizi hazır hissettiğinizde diğer bölüme geçelim.',
-      emoji: '☕'
-    },
-    {
-      title: 'Muhteşem İlerleme!',
-      description: 'Çok iyi gidiyorsunuz! Kısa bir nefes alın, gerinin ve hazır olduğunuzda devam edelim. Acelemiz yok!',
-      emoji: '🌟'
-    },
-    {
-      title: 'Tebrikler!',
-      description: 'Bir adım daha yaklaştınız hedeﬁnize! Biraz enerji toplayın, belki bir şeyler atıştırın, hazır olduğunuzda devam ederiz.',
-      emoji: '🎯'
-    },
-    {
-      title: 'Süpersiniz!',
-      description: 'Bu bölümü harika tamamladınız! Biraz dinlenin, kafanızı rahatlatın. Sonra tekrar başlayalım, tamam mı?',
-      emoji: '💪'
-    },
-    {
-      title: 'Çok İyi Gidiyorsunuz!',
-      description: 'İnanılmaz bir performans gösteriyorsunuz! Kısa bir mola yapın, enerjilenin. Diğer bölüm sizi bekliyor!',
-      emoji: '🚀'
-    },
-    {
-      title: 'Bravo!',
-      description: 'Bir bölümü daha geride bıraktınız! Kendinize bir ödül verin, biraz ara verin. Hazır olduğunuzda devam edelim.',
-      emoji: '🎉'
-    },
-    {
-      title: 'Harikasınız!',
-      description: 'Bu tempoda devam edersek çok iyi bir sonuç alacağız! Şimdi küçük bir mola, sonra tekrar sahneye!',
-      emoji: '⭐'
-    },
-    {
-      title: 'Aferin Size!',
-      description: 'Çok güzel gidiyoruz! Biraz soluklanın, rahatlayın. Sonraki bölümde görüşmek üzere!',
-      emoji: '👏'
-    }
-  ]
-  
-  // Mesajı belirle: Önce custom, yoksa random
-  let messageToShow
-  
-  if (customMessage && customMessage.title) {
-    // Backend'den özel mesaj geldi
-    messageToShow = {
-      title: customMessage.title,
-      description: customMessage.message || '',
-      emoji: customMessage.emoji || (isLastSection ? '🏆' : '🎉')
-    }
-  } else {
-    // Custom mesaj yok, random mesaj göster
-    const messages = isLastSection ? finalMessages : motivationalMessages
-    messageToShow = messages[Math.floor(Math.random() * messages.length)]
-  }
-  
-  // Mesajı göster (son bölüm ve ara bölüm için farklı mesajlar)
-  completionMessage.value = messageToShow
-  showSectionCompletedMessage.value = true
-  
-  // Son bölümse assessment tamamlama işlemini yap (ama popup'ta kalıyoruz)
-  if (isLastSection) {
-    await store.completeAssessment()
-  }
-  
-  // Not: Kullanıcı butona tıklayınca:
-  // - Ara bölümse: proceedToNextSection() → sonraki bölüme geçer
-  // - Son bölümse: proceedToNextSection() → /assessment/completed sayfasına gider
-}
-
-const completeAssessment = async () => {
-  const result = await store.completeAssessment()
-  
-  if (result.success) {
-    toast.add({
-      severity: 'success',
-      summary: 'Tebrikler!',
-      detail: 'Assessment başarıyla tamamlandı',
-      life: 3000
-    })
-    
-    setTimeout(() => {
-      router.push('/assessment/completed')
-    }, 2000)
-  } else {
-    toast.add({
-      severity: 'error',
-      summary: 'Hata',
-      detail: result.error,
-      life: 3000
-    })
-  }
-}
-
-// TTS Functions
-const initSpeechSynthesis = () => {
-  if (process.client && 'speechSynthesis' in window) {
-    speechSynthesis = window.speechSynthesis
-  }
-}
-
-const stripHtml = (html) => {
-  if (!html) return ''
-  // HTML etiketlerini kaldır
-  const doc = new DOMParser().parseFromString(html, 'text/html')
-  return doc.body.textContent || ''
-}
-
-const toggleSpeech = (htmlContent) => {
-  if (!speechSynthesis) {
-    toast.add({
-      severity: 'warn',
-      summary: 'Desteklenmiyor',
-      detail: 'Tarayıcınız ses okuma özelliğini desteklemiyor',
-      life: 3000
-    })
-    return
-  }
-
-  // Eğer konuşma devam ediyorsa durdur
-  if (isSpeaking.value) {
-    speechSynthesis.cancel()
-    isSpeaking.value = false
-    currentUtterance = null
-    return
-  }
-
-  // Yeni konuşma başlat
-  isSpeechLoading.value = true
-  const text = stripHtml(htmlContent)
-  
-  if (!text) {
-    toast.add({
-      severity: 'warn',
-      summary: 'Boş İçerik',
-      detail: 'Okunacak metin bulunamadı',
-      life: 3000
-    })
-    isSpeechLoading.value = false
-    return
-  }
-
-  currentUtterance = new SpeechSynthesisUtterance(text)
-  currentUtterance.lang = 'tr-TR' // Türkçe
-  currentUtterance.rate = 1.0 // Normal hız
-  currentUtterance.pitch = 1.0 // Normal pitch
-
-  currentUtterance.onstart = () => {
-    isSpeaking.value = true
-    isSpeechLoading.value = false
-  }
-
-  currentUtterance.onend = () => {
-    isSpeaking.value = false
-    currentUtterance = null
-  }
-
-  currentUtterance.onerror = (event) => {
-    // 'interrupted' veya 'canceled' hataları normal durumlardır (manuel durdurma)
-    if (event.error === 'interrupted' || event.error === 'canceled') {
-      console.log('🔇 TTS durduruldu:', event.error)
-      isSpeaking.value = false
-      isSpeechLoading.value = false
-      return
-    }
-    
-    // Gerçek hatalarda toast göster ve console'a error yaz
-    console.error('❌ TTS Error:', event)
-    isSpeaking.value = false
-    isSpeechLoading.value = false
-    toast.add({
-      severity: 'error',
-      summary: 'Ses Hatası',
-      detail: 'Metin okunurken bir hata oluştu',
-      life: 3000
-    })
-  }
-
-  speechSynthesis.speak(currentUtterance)
-}
-
 // Watchers
 // Her egzersiz değiştiğinde başlangıç zamanını kaydet
 watch(currentExerciseIndex, () => {
   currentExerciseStartTime.value = Date.now()
   console.log('⏱️ Egzersiz başlangıç zamanı kaydedildi:', new Date(currentExerciseStartTime.value).toLocaleTimeString())
+})
+
+// Bölüm değiştiğinde veya UI başladığında talimatları kontrol et
+const checkAndShowInstructions = () => {
+  console.log('🔍 checkAndShowInstructions çağrıldı:', {
+    hasStartedUI: store.hasStartedUI,
+    hasUnseenInstructions: hasUnseenInstructions.value,
+    showSectionCompletedMessage: showSectionCompletedMessage.value,
+    sectionDescription: !!currentSection.value?.section_description,
+    sectionUuid: currentSection.value?.section_uuid,
+    seenInstructions: Array.from(seenInstructions.value)
+  })
   
-  // Egzersiz değiştiğinde TTS'i durdur
-  if (isSpeaking.value && speechSynthesis) {
-    speechSynthesis.cancel()
-    isSpeaking.value = false
-    currentUtterance = null
+  if (store.hasStartedUI && hasUnseenInstructions.value && !showSectionCompletedMessage.value) {
+    console.log('📋 Bölüm talimatları popup açılıyor:', currentSection.value?.section_title)
+    showInstructionsPopup.value = true
+  }
+}
+
+// Bölüm değiştiğinde kontrol et
+watch(() => currentSection.value?.section_uuid, (newUuid, oldUuid) => {
+  if (newUuid && newUuid !== oldUuid) {
+    setTimeout(() => {
+      nextTick(() => checkAndShowInstructions())
+    }, 300)
+  }
+})
+
+// UI başladığında da kontrol et (ilk bölüm için)
+watch(() => store.hasStartedUI, (started) => {
+  if (started) {
+    setTimeout(() => {
+      nextTick(() => checkAndShowInstructions())
+    }, 500)
   }
 })
 
@@ -1641,9 +1920,6 @@ watch(currentExerciseIndex, () => {
 // Lifecycle
 onMounted(async () => {
   try {
-    // TTS initialize et
-    initSpeechSynthesis()
-    
     // Pinia persist hydration'ını bekle
     await nextTick()
     await new Promise(resolve => setTimeout(resolve, 100))
@@ -1674,23 +1950,9 @@ onMounted(async () => {
       }, 2000)
       return
     }
-    
-    // Session doğrulama (opsiyonel - middleware zaten yapıyor)
-    // const sessionValid = await store.validateSession()
-    // if (!sessionValid.success) {
-    //   toast.add({
-    //     severity: 'error',
-    //     summary: 'Oturum Hatası',
-    //     detail: 'Oturumunuz sona ermiş',
-    //     life: 3000
-    //   })
-    //   router.push('/assessment/error?message=Oturum süresi doldu')
-    //   return
-    // }
 
-    // Proje özet bilgilerini yükle (GÜVENLİ - egzersiz detayları YOK!)
-    // ÖNEMLİ: Her zaman backend'den güncel progress bilgisini almak için API çağrısı yap
-    // Cache kullanmıyoruz çünkü katılımcı tekrar giriş yaptığında güncel bilgiler lazım
+    // ÖNCE Proje özet bilgilerini yükle (GÜVENLİ - egzersiz detayları YOK!)
+    // Bu sayede hasStartedUI ve startedAt güncellenir.
     console.log('Proje özeti yükleniyor...')
     await store.fetchProjectSummary()
     
@@ -1699,9 +1961,15 @@ onMounted(async () => {
     console.log('  - currentSectionId:', store.currentSectionId)
     console.log('  - completedSections:', store.completedSections.length)
     console.log('  - completedAt:', store.completedAt)
-    
+
+    // Politikaları yükle (completed kontrolünden ÖNCE - ilk girişte gösterilmeli)
+    if (!store.hasStartedUI) {
+      await loadPolicies()
+    }
+
     // Assessment zaten tamamlanmış mı kontrol et
-    if (store.completedAt) {
+    // NOT: Sadece gerçekten tamamlanmışsa (tüm bölümler completed)
+    if (store.completedAt && store.completedSections.length === store.sections.length) {
       console.log('✅ Assessment zaten tamamlanmış - completed sayfasına yönlendiriliyor')
       toast.add({
         severity: 'info',
@@ -1717,16 +1985,27 @@ onMounted(async () => {
       return
     }
     
+    // Başlangıç Bölümü Belirleme Mantığı:
+    // Eğer UI başlatılmamışsa (startedAt yoksa), Intro'yu seç.
+    // Backend currentSectionId olarak ilk bölümü dönse bile, henüz "Başla" denmediği için Intro gösterilmeli.
+    if (!store.hasStartedUI) {
+      store.setCurrentSection('intro')
+      console.log('📍 Henüz başlanmamış -> Intro ekranı gösteriliyor')
+      console.log('📝 Karşılama mesajı:', store.projectWelcomeMessage ? 'VAR' : 'YOK')
+    } else if (!store.currentSectionId) {
+      // Başlamış ama currentSectionId yoksa (hatalı durum), yine intro
+      store.setCurrentSection('intro')
+    }
+    
+    // Session doğrulama (opsiyonel - middleware zaten yapıyor)
+    
     // İlk bölümün detaylarını yükle (eğer başlanmışsa)
     if (store.hasStartedUI && store.currentSectionId) {
       console.log('İlk bölüm detayları yükleniyor:', store.currentSectionId)
       await store.fetchSectionDetails(store.currentSectionId)
       
       // Mevcut cevapları yükle
-      Object.keys(store.responses).forEach(exerciseUuid => {
-        const response = store.responses[exerciseUuid]
-        exerciseAnswers.value[exerciseUuid] = response.answer_text || response.answer_value
-      })
+      loadExistingAnswers()
       
       // İlk cevapsız egzersizi bul (kaldığı yerden devam etsin)
       const exercises = currentSectionExercises.value
@@ -1752,48 +2031,8 @@ onMounted(async () => {
     if (store.hasStartedUI && store.currentSectionId) {
       const section = store.sections.find(s => s.section_uuid === store.currentSectionId)
       if (section) {
-        // Backend'den kalan süreyi kontrol et
-        const timeResult = await store.fetchRemainingTime()
-        
-        if (timeResult.success) {
-          if (timeResult.data.time_expired || timeResult.data.remaining_seconds <= 0) {
-            // SÜRE BİTMİŞ! Otomatik tamamla
-            console.log('⏰ Bölüm süresi dolmuş, otomatik tamamlanıyor...')
-            toast.add({
-              severity: 'warn',
-              summary: 'Bölüm Süresi Dolmuş',
-              detail: 'Bu bölümün süresi dolmuş. Otomatik olarak tamamlanacak.',
-              life: 5000
-            })
-            
-            // Otomatik complete
-            await onTimerEnd()
-          } else if (timeResult.data.remaining_seconds > 0) {
-            // Süre var, timer devam ediyor
-            remainingTime.value = timeResult.data.remaining_seconds
-            console.log('⏱️ Mevcut bölüm timer devam ediyor:', remainingTime.value, 'saniye')
-            
-            // Timer'ı başlat (ama backend'e yeni istek atmadan)
-            sectionTimer.value = setInterval(() => {
-              if (remainingTime.value > 0) {
-                remainingTime.value--
-              }
-              
-              if (remainingTime.value <= 0) {
-                onTimerEnd()
-              }
-            }, 1000)
-            
-            // Sync interval'ı başlat
-            timerSyncInterval.value = setInterval(async () => {
-              await syncTimerWithBackend()
-            }, 10000)
-          }
-        } else {
-          // Backend'den süre bilgisi alınamadı, yeni başlat
-          console.log('🆕 Backend süre bilgisi yok, yeni timer başlatılıyor')
-          await startSectionTimer(section)
-        }
+        // Composable'daki resumeTimer kullan
+        await resumeTimer(section)
       }
     }
     
@@ -1801,14 +2040,11 @@ onMounted(async () => {
     currentExerciseStartTime.value = Date.now()
     console.log('⏱️ İlk egzersiz başlangıç zamanı kaydedildi')
     
-    // Welcome Dialog göster (sadece daha önce gösterilmediyse ve henüz başlanmamışsa)
-    const welcomeAcknowledgedKey = `welcome_acknowledged_${store.projectUUID}`
-    const hasAcknowledged = localStorage.getItem(welcomeAcknowledgedKey)
+    // Bölüm talimatlarını kontrol et (sayfa yenileme durumunda)
+    setTimeout(() => {
+      checkAndShowInstructions()
+    }, 800)
     
-    if (!hasAcknowledged && !store.hasStartedUI) {
-      console.log('🎉 Karşılama mesajı gösteriliyor...')
-      showWelcomeDialog.value = true
-    }
   } catch (error) {
     console.error('Workspace initialization error:', error)
     toast.add({
@@ -1818,26 +2054,91 @@ onMounted(async () => {
       life: 3000
     })
   }
-  
-  // ESC tuşu listener ekle (PDF viewer için)
-  window.addEventListener('keydown', handlePdfEscape)
 })
+
+// Watch: Dosya varsa sidebar'ı otomatik aç (sadece ilk kez veya bölüm değişince)
+watch(() => [store.currentSectionId, hasDocumentsInCurrentSection.value], ([newSectionId, hasDocuments], oldValue) => {
+  // oldValue ilk çalıştırmada undefined olabilir
+  const oldSectionId = oldValue ? oldValue[0] : undefined
+  
+  // Bölüm değiştiğinde veya ilk yüklemede
+  if (newSectionId !== oldSectionId || oldSectionId === undefined) {
+    if (hasDocuments) {
+      console.log('📂 Dosya var, sidebar açılıyor')
+      showInventorySidebar.value = true
+    } else {
+      console.log('📂 Dosya yok, sidebar kapalı')
+      showInventorySidebar.value = false
+    }
+  }
+}, { immediate: true })
 
 // Cleanup
 onBeforeUnmount(() => {
-  stopSectionTimer()
+  stopTimer()
   
   // TTS cleanup
-  if (speechSynthesis && isSpeaking.value) {
+  if (typeof speechSynthesis !== 'undefined') {
     speechSynthesis.cancel()
   }
-  
-  // ESC tuşu listener kaldır
-  window.removeEventListener('keydown', handlePdfEscape)
 })
 </script>
 
 <style scoped>
+/* Countdown Overlay */
+.countdown-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background: rgba(0, 0, 0, 0.8);
+  z-index: 9999;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  backdrop-filter: blur(5px);
+}
+
+.countdown-content {
+  text-align: center;
+  color: white;
+}
+
+.countdown-number {
+  font-size: 10rem;
+  font-weight: 800;
+  line-height: 1;
+  animation: pulse 1s infinite;
+}
+
+.countdown-text {
+  font-size: 2rem;
+  margin-top: 1rem;
+  opacity: 0.8;
+}
+
+/* Intro Item */
+.intro-item {
+  border-left: 4px solid transparent;
+}
+
+.intro-item.active {
+  border-left-color: #8b5cf6;
+  background: #f3f4f6;
+}
+
+.intro-item .section-icon i {
+  color: #8b5cf6;
+  font-size: 1.2rem;
+}
+
+@keyframes pulse {
+  0% { transform: scale(1); }
+  50% { transform: scale(1.1); }
+  100% { transform: scale(1); }
+}
+
 /* Custom Scrollbar */
 ::-webkit-scrollbar {
   width: 8px;
@@ -1868,7 +2169,7 @@ onBeforeUnmount(() => {
   /* TÜM ASSESSMENT WORKSPACE İÇİN TÜRKÇE KELİME WRAP - KELİMELER BÖLÜNMEDEN */
   word-wrap: break-word;
   overflow-wrap: break-word;
-  word-break: break-word; /* Evaluate sayfasındaki gibi */
+  word-break: normal; /* Kelimeleri boşluklardan böl, ortasından değil */
   white-space: normal;
 }
 
@@ -1876,7 +2177,7 @@ onBeforeUnmount(() => {
 .assessment-workspace * {
   word-wrap: break-word;
   overflow-wrap: break-word;
-  word-break: break-word; /* Evaluate sayfasındaki gibi */
+  word-break: normal; /* Kelimeleri boşluklardan böl, ortasından değil */
   white-space: normal;
 }
 
@@ -1930,17 +2231,55 @@ onBeforeUnmount(() => {
   height: 0.5rem;
 }
 
+.inventory-btn-wrapper {
+  position: relative;
+  display: inline-flex;
+}
+
+.inventory-toggle-btn {
+  border-color: #8b5cf6 !important;
+  color: #8b5cf6 !important;
+}
+
+.inventory-toggle-btn:hover {
+  background-color: #f3e8ff !important;
+  border-color: #7c3aed !important;
+  color: #7c3aed !important;
+}
+
+.inventory-badge {
+  position: absolute;
+  top: -8px;
+  right: -8px;
+  min-width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.75rem;
+  font-weight: 600;
+  border-radius: 10px;
+  background: #3b82f6 !important;
+  color: white !important;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.15);
+}
+
 /* Main Content - 3 Column Layout - Compact & Dynamic */
 .workspace-content {
   flex: 1;
   display: grid;
-  grid-template-columns: 280px 1fr 300px;
+  grid-template-columns: 280px 1fr;
   width: 100%;
   gap: 1rem;
   padding: 1rem;
   overflow: hidden;
   height: calc(100vh - 68px);
   transition: grid-template-columns 0.3s ease;
+}
+
+/* Sidebar açıkken: 3 column */
+.workspace-content:has(.documents-sidebar) {
+  grid-template-columns: 280px 1fr 300px;
 }
 
 /* PDF Viewer açıkken: Sol dar, sağ geniş */
@@ -2061,8 +2400,8 @@ onBeforeUnmount(() => {
 /* Exercises Area */
 .exercises-area {
   min-width: 0; /* Grid overflow fix */
-  overflow: hidden;
-  max-height: 100%;
+  overflow-y: auto; /* Scroll when content is long */
+  max-height: calc(100vh - 120px); /* Full height minus header */
   display: flex;
   flex-direction: column;
 }
@@ -2074,13 +2413,17 @@ onBeforeUnmount(() => {
   padding: 4rem;
   display: flex;
   justify-content: center;
-  align-items: center;
+  align-items: flex-start; /* Changed from center to allow scroll */
   min-height: 500px;
+  overflow-y: auto; /* Enable scroll when content is long */
+  max-height: 100%;
 }
 
 .welcome-content {
   text-align: center;
-  max-width: 600px;
+  max-width: 800px; /* Increased from 600px for better readability */
+  width: 100%;
+  margin: auto; /* Center horizontally */
 }
 
 .welcome-icon {
@@ -2253,7 +2596,7 @@ onBeforeUnmount(() => {
 .answer-textarea :deep(textarea) {
   word-wrap: break-word;
   overflow-wrap: break-word;
-  word-break: break-word;
+  word-break: normal; /* Kelimeleri boşluklardan böl, ortasından değil */
   white-space: normal;
 }
 
@@ -2295,6 +2638,26 @@ onBeforeUnmount(() => {
   flex-direction: column;
   max-height: 100%;
   transition: all 0.3s ease;
+}
+
+.inventory-sidebar-content {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+}
+
+.inventory-sidebar-content .sidebar-header {
+  padding: 1rem 1.25rem;
+  border-bottom: 1px solid #e5e7eb;
+  background: #f9fafb;
+}
+
+.inventory-sidebar-content .sidebar-header h3 {
+  margin: 0;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: #374151;
 }
 
 /* PDF Viewer Mode */
@@ -2458,6 +2821,80 @@ onBeforeUnmount(() => {
   margin: 0;
 }
 
+/* Minimal File List Styles */
+.files-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.file-item-minimal {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.75rem 1rem;
+  background: #f9fafb;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  border: 1px solid transparent;
+}
+
+.file-item-minimal:hover {
+  background: #f3f4f6;
+  border-color: #667eea;
+}
+
+.file-icon-minimal {
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: white;
+  border-radius: 6px;
+  flex-shrink: 0;
+}
+
+.file-icon-minimal i {
+  font-size: 1rem;
+}
+
+.file-info-minimal {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+}
+
+.file-name-minimal {
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: #374151;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.file-section-minimal {
+  font-size: 0.75rem;
+  color: #9ca3af;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.file-arrow {
+  font-size: 0.75rem;
+  color: #9ca3af;
+  flex-shrink: 0;
+}
+
+.file-item-minimal:hover .file-arrow {
+  color: #667eea;
+}
+
 .empty-documents {
   text-align: center;
   padding: 2rem;
@@ -2587,21 +3024,73 @@ onBeforeUnmount(() => {
   flex: 1;
 }
 
+.title-with-badge {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
 .section-title {
   font-size: 1.375rem;
-  margin: 0 0 0.25rem;
+  margin: 0;
   font-weight: 700;
   text-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
   word-wrap: break-word;
   overflow-wrap: break-word;
 }
 
+.title-separator {
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 1.25rem;
+}
+
+.exercise-title-inline {
+  font-size: 1.125rem;
+  font-weight: 500;
+  opacity: 0.95;
+}
+
+.exercise-type-badge-inline {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.25rem 0.75rem;
+  border-radius: 20px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.exercise-type-badge-inline.presentation {
+  background: rgba(255, 255, 255, 0.25);
+  color: white;
+  backdrop-filter: blur(4px);
+}
+
+.exercise-type-badge-inline.analysis {
+  background: rgba(255, 255, 255, 0.25);
+  color: white;
+  backdrop-filter: blur(4px);
+}
+
+.exercise-type-badge-inline.team_building {
+  background: rgba(251, 191, 36, 0.3);
+  color: white;
+  backdrop-filter: blur(4px);
+}
+
 .section-subtitle {
   font-size: 0.875rem;
   margin: 0;
   opacity: 0.9;
-  word-wrap: break-word;
-  overflow-wrap: break-word;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
 }
 
 .complete-section-btn {
@@ -2654,6 +3143,8 @@ onBeforeUnmount(() => {
   flex: 1;
   margin: 0 auto;
   margin-bottom: 1rem;
+  display: flex;
+  flex-direction: column;
 }
 
 .exercise-navigation {
@@ -2766,6 +3257,31 @@ onBeforeUnmount(() => {
   word-wrap: break-word;
 }
 
+/* Info Type Card - Flex Container with Sticky Footer */
+.modern-exercise-card.info-type-card {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+}
+
+/* Presentation Type Card - Full Height */
+.modern-exercise-card.presentation-type-card {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  height: 100%;
+  overflow: hidden;
+}
+
+/* Scrollable Content Area */
+.exercise-content-area {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding-bottom: 1rem;
+}
+
 .exercise-card-header {
   margin-bottom: 1.25rem;
   display: flex;
@@ -2801,6 +3317,11 @@ onBeforeUnmount(() => {
   color: #2563eb;
 }
 
+.exercise-type-badge.team_building {
+  background: #fef3c7;
+  color: #f59e0b;
+}
+
 .exercise-title {
   font-size: 1.375rem;
   margin: 0;
@@ -2812,87 +3333,6 @@ onBeforeUnmount(() => {
   flex: 1;
 }
 
-/* Exercise Instructions Panel - Compact */
-.exercise-instructions-panel {
-  margin-bottom: 1.25rem;
-}
-
-.exercise-instructions-panel :deep(.p-panel-header) {
-  background: #fef3c7 !important;
-  border-left: 4px solid #f59e0b;
-  border-radius: 8px 8px 0 0 !important;
-  padding: 0.75rem 1rem !important;
-}
-
-.exercise-instructions-panel :deep(.p-panel-content) {
-  background: #fef3c7;
-  border-left: 4px solid #f59e0b;
-  border-radius: 0 0 8px 8px;
-  padding: 1rem !important;
-}
-
-.instructions-panel-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  width: 100%;
-  gap: 1rem;
-}
-
-.header-left {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-  font-weight: 700;
-  color: #b45309;
-  font-size: 1.05rem;
-}
-
-.header-left i {
-  font-size: 1.125rem;
-}
-
-.header-right {
-  display: flex;
-  align-items: center;
-}
-
-.instructions-content {
-  color: #78350f;
-  line-height: 1.7;
-  word-wrap: break-word;
-  overflow-wrap: break-word;
-  word-break: break-word; /* Evaluate sayfasındaki gibi */
-  white-space: normal;
-}
-
-.instructions-content :deep(ul),
-.instructions-content :deep(ol) {
-  margin: 0.5rem 0;
-  padding-left: 1.5rem;
-}
-
-.instructions-content :deep(li) {
-  margin: 0.5rem 0;
-  word-wrap: break-word;
-  overflow-wrap: break-word;
-  word-break: break-word;
-}
-
-.instructions-content :deep(strong) {
-  color: #92400e;
-  word-wrap: break-word;
-  overflow-wrap: break-word;
-  word-break: break-word;
-}
-
-.instructions-content :deep(p) {
-  margin: 0.5rem 0;
-  word-wrap: break-word;
-  overflow-wrap: break-word;
-  word-break: break-word;
-}
-
 /* Exercise Description - Compact */
 .exercise-description-modern {
   font-size: 0.9375rem;
@@ -2901,7 +3341,7 @@ onBeforeUnmount(() => {
   margin-bottom: 1.5rem;
   word-wrap: break-word;
   overflow-wrap: break-word;
-  word-break: break-word;
+  word-break: normal; /* Kelimeleri boşluklardan böl */
   white-space: normal;
 }
 
@@ -2909,12 +3349,44 @@ onBeforeUnmount(() => {
   margin: 0 0 1rem;
   word-wrap: break-word;
   overflow-wrap: break-word;
-  word-break: break-word;
+  word-break: normal; /* Kelimeleri boşluklardan böl */
 }
 
 /* Modern Answer Section - Compact */
 .modern-answer-section {
   margin-top: 1.5rem;
+}
+
+/* Analiz Raporu Section */
+.modern-answer-section.analysis-report-section {
+  margin-top: 0;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.modern-answer-section.analysis-report-section .answer-header {
+  margin-bottom: 1rem;
+}
+
+.modern-answer-section.analysis-report-section .answer-label {
+  font-size: 1.1rem;
+  color: #1f2937;
+}
+
+.modern-answer-section.analysis-report-section .answer-label i {
+  color: #8b5cf6;
+}
+
+/* Analiz Editor - Daha Büyük */
+:deep(.analysis-editor) {
+  min-height: 400px !important;
+}
+
+:deep(.analysis-editor .ProseMirror) {
+  min-height: 350px !important;
+  font-size: 1rem;
+  line-height: 1.75;
 }
 
 .answer-header {
@@ -3010,6 +3482,25 @@ onBeforeUnmount(() => {
   font-size: 1.2rem;
 }
 
+/* Ekip Kurma Section */
+.team-building-section {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.team-building-locked {
+  margin-top: 1rem;
+}
+
+.team-building-actions {
+  margin-top: 1.5rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid #e2e8f0;
+}
+
 .answer-actions-modern {
   display: flex;
   align-items: center;
@@ -3082,9 +3573,18 @@ onBeforeUnmount(() => {
   }
 }
 
-/* Info Exercise Actions */
-.info-exercise-actions {
-  margin-top: 2rem;
+/* Info Exercise Footer - Sticky Bottom */
+.info-exercise-footer {
+  position: sticky;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: white;
+  border-top: 1px solid #e5e7eb;
+  padding: 1.5rem 0 0 0;
+  margin-top: auto;
+  box-shadow: 0 -4px 12px rgba(0, 0, 0, 0.05);
+  z-index: 10;
 }
 
 .info-message {
@@ -3121,7 +3621,477 @@ onBeforeUnmount(() => {
   box-shadow: 0 6px 20px rgba(59, 130, 246, 0.4);
 }
 
+/* Presentation Notification */
+.presentation-notification {
+  position: absolute;
+  top: 1rem;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 100;
+  max-width: 90%;
+  width: max-content;
+}
+
+.notification-content {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  background: white;
+  padding: 0.875rem 1.25rem;
+  border-radius: 12px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12), 0 2px 8px rgba(0, 0, 0, 0.08);
+  border: 1px solid rgba(102, 126, 234, 0.2);
+}
+
+.notification-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.notification-icon i {
+  color: white;
+  font-size: 1.1rem;
+}
+
+.notification-text {
+  flex: 1;
+}
+
+.notification-text p {
+  margin: 0;
+  color: #374151;
+  font-size: 0.9rem;
+  line-height: 1.5;
+}
+
+.notification-dismiss {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 1rem;
+  border: none;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  border-radius: 8px;
+  font-size: 0.85rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  flex-shrink: 0;
+}
+
+.notification-dismiss:hover {
+  transform: scale(1.05);
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+}
+
+.notification-dismiss i {
+  font-size: 0.85rem;
+}
+
+/* Notification Animation */
+.notification-slide-enter-active,
+.notification-slide-leave-active {
+  transition: all 0.3s ease;
+}
+
+.notification-slide-enter-from {
+  opacity: 0;
+  transform: translateX(-50%) translateY(-20px);
+}
+
+.notification-slide-leave-to {
+  opacity: 0;
+  transform: translateX(-50%) translateY(-10px);
+}
+
+/* Slide Fade Animation for Button */
+.slide-fade-enter-active,
+.slide-fade-leave-active {
+  transition: all 0.3s ease;
+}
+
+.slide-fade-enter-from {
+  opacity: 0;
+  transform: translateX(20px);
+}
+
+.slide-fade-leave-to {
+  opacity: 0;
+  transform: translateX(20px);
+}
+
+/* Header Actions Row */
+.header-actions-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+}
+
+.presentation-complete-btn {
+  animation: pulse-glow 2s infinite;
+}
+
+@keyframes pulse-glow {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.4); }
+  50% { box-shadow: 0 0 0 8px rgba(34, 197, 94, 0); }
+}
+
+/* Presentation Exercise Container - Slide Show */
+.presentation-exercise-container {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  gap: 0.5rem;
+  transition: all 0.3s ease;
+  position: relative;
+}
+
+/* Fullscreen Mode */
+.presentation-exercise-container.fullscreen-mode {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  background: rgba(0, 0, 0, 0.95);
+  padding: 1rem;
+  gap: 0.5rem;
+}
+
+.presentation-exercise-container.fullscreen-mode .slide-content {
+  max-height: none;
+  min-height: 0;
+  flex: 1;
+  border-radius: 8px;
+}
+
+.presentation-exercise-container.fullscreen-mode .slide-thumbnails {
+  background: rgba(255, 255, 255, 0.1);
+  padding: 0.75rem;
+  border-radius: 12px;
+}
+
+.presentation-exercise-container.fullscreen-mode .slide-thumb {
+  background: rgba(255, 255, 255, 0.2);
+  color: white;
+}
+
+.presentation-exercise-container.fullscreen-mode .slide-thumb.active {
+  background: #667eea;
+}
+
+.presentation-exercise-container.fullscreen-mode .slide-progress-bar {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+/* Slide Show Container */
+.slide-show-container {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  min-height: 0;
+  height: 100%;
+}
+
+/* Slide Area - Main viewing area */
+.slide-area {
+  flex: 1;
+  display: flex;
+  align-items: stretch;
+  justify-content: center;
+  position: relative;
+  min-height: 0;
+}
+
+/* Overlay Navigation Buttons */
+.slide-nav-overlay {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  border: none;
+  background: rgba(255, 255, 255, 0.9);
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.15);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+  z-index: 20;
+  opacity: 0;
+}
+
+.slide-content:hover .slide-nav-overlay {
+  opacity: 1;
+}
+
+.slide-nav-overlay.slide-nav-prev {
+  left: 12px;
+}
+
+.slide-nav-overlay.slide-nav-next {
+  right: 12px;
+}
+
+.slide-nav-overlay i {
+  font-size: 1rem;
+  color: #374151;
+}
+
+.slide-nav-overlay:hover:not(.disabled) {
+  background: #667eea;
+  box-shadow: 0 4px 16px rgba(102, 126, 234, 0.5);
+  transform: translateY(-50%) scale(1.1);
+}
+
+.slide-nav-overlay:hover:not(.disabled) i {
+  color: white;
+}
+
+.slide-nav-overlay.disabled {
+  opacity: 0.3 !important;
+  cursor: not-allowed;
+}
+
+/* Fullscreen Toggle Button */
+.fullscreen-toggle {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  border: none;
+  background: rgba(255, 255, 255, 0.9);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+  z-index: 20;
+  opacity: 0;
+}
+
+.slide-content:hover .fullscreen-toggle {
+  opacity: 1;
+}
+
+.fullscreen-toggle i {
+  font-size: 0.9rem;
+  color: #374151;
+}
+
+.fullscreen-toggle:hover {
+  background: #667eea;
+  transform: scale(1.1);
+}
+
+.fullscreen-toggle:hover i {
+  color: white;
+}
+
+/* Slide Counter Overlay */
+.slide-counter-overlay {
+  position: absolute;
+  bottom: 12px;
+  right: 12px;
+  background: rgba(0, 0, 0, 0.6);
+  color: white;
+  padding: 0.35rem 0.75rem;
+  border-radius: 20px;
+  font-size: 0.8rem;
+  font-weight: 500;
+  z-index: 15;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+.slide-content:hover .slide-counter-overlay {
+  opacity: 1;
+}
+
+/* Legacy Navigation Buttons (hidden now) */
+.slide-nav-btn {
+  display: none;
+}
+
+.slide-nav-btn.disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+/* Slide Content Area */
+.slide-content {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(145deg, #f8fafc 0%, #f1f5f9 100%);
+  border-radius: 16px;
+  overflow: hidden;
+  position: relative;
+  min-height: 0;
+  height: 100%;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+  cursor: pointer;
+}
+
+.slide-wrapper {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  transition: opacity 0.15s ease, transform 0.15s ease;
+}
+
+.slide-wrapper.slide-transitioning {
+  opacity: 0.3;
+  transform: scale(0.98);
+}
+
+.pdf-slide-canvas {
+  max-width: 100%;
+  max-height: 100%;
+  border-radius: 8px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12);
+}
+
+/* Loading Overlay */
+.slide-loading-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(248, 250, 252, 0.9);
+  backdrop-filter: blur(4px);
+}
+
+/* Progress Bar */
+.slide-progress-container {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 0 0.5rem;
+}
+
+.slide-progress-bar {
+  flex: 1;
+  height: 6px;
+  background: #e2e8f0;
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.slide-progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
+  border-radius: 3px;
+  transition: width 0.3s ease;
+}
+
+.slide-counter {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: #64748b;
+  min-width: 60px;
+  justify-content: flex-end;
+}
+
+.current-slide {
+  color: #667eea;
+  font-size: 1.1rem;
+}
+
+.slide-separator {
+  color: #cbd5e1;
+}
+
+/* Slide Thumbnails */
+.slide-thumbnails {
+  display: flex;
+  justify-content: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  padding: 0.5rem;
+}
+
+.slide-thumb {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  border: 2px solid #e2e8f0;
+  background: white;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #64748b;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.slide-thumb:hover {
+  border-color: #667eea;
+  color: #667eea;
+}
+
+.slide-thumb.active {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  border-color: transparent;
+  color: white;
+  transform: scale(1.1);
+}
+
+.slide-thumb.viewed {
+  background: #f0fdf4;
+  border-color: #22c55e;
+  color: #16a34a;
+}
+
+/* No Presentation File */
+.no-presentation-file {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1rem;
+  padding: 3rem;
+  background: #f8fafc;
+  border-radius: 16px;
+  border: 2px dashed #e2e8f0;
+  color: #64748b;
+}
+
+.no-presentation-file i {
+  font-size: 3rem;
+  color: #94a3b8;
+}
+
+.no-presentation-file p {
+  margin: 0;
+  font-size: 1.1rem;
+}
+
 /* Animations */
+.animate-fade-in {
+  animation: slideInUp 0.5s ease-out;
+}
+
 @keyframes fadeIn {
   from { opacity: 0; }
   to { opacity: 1; }
@@ -3246,8 +4216,16 @@ onBeforeUnmount(() => {
   /* Kelimeleri bölmeden wrap - Evaluate sayfasındaki gibi */
   word-wrap: break-word;
   overflow-wrap: break-word;
-  word-break: break-word;
+  word-break: normal; /* Kelimeleri boşluklardan böl, ortasından değil */
   white-space: normal;
+  /* Scroll for very long content */
+  max-height: 400px;
+  overflow-y: auto;
+  text-align: left; /* Left align for better readability of long text */
+  padding: 1rem;
+  background: #f9fafb;
+  border-radius: 8px;
+  margin-bottom: 1.5rem;
 }
 
 .welcome-message-html :deep(h1),
@@ -3301,7 +4279,7 @@ onBeforeUnmount(() => {
   /* Kelimeleri bölmeden wrap - Evaluate sayfasındaki gibi */
   word-wrap: break-word;
   overflow-wrap: break-word;
-  word-break: break-word;
+  word-break: normal; /* Kelimeleri boşluklardan böl, ortasından değil */
   white-space: normal;
 }
 
@@ -3379,5 +4357,328 @@ onBeforeUnmount(() => {
   background: #f3f4f6;
   padding: 0.25rem 0.5rem;
   border-radius: 4px;
+}
+
+/* Self-Evaluation Dialog Styles */
+.self-evaluation-content {
+  max-height: 60vh;
+  overflow-y: auto;
+}
+
+.question-item {
+  padding: 1.25rem;
+  background: #f9fafb;
+  border-radius: 8px;
+  border: 1px solid #e5e7eb;
+}
+
+.question-header h4 {
+  font-size: 1rem;
+  line-height: 1.5;
+  margin: 0;
+}
+
+.likert-button {
+  flex: 1;
+  padding: 0.75rem;
+  background: white;
+  border: 2px solid #d1d5db;
+  border-radius: 8px;
+  font-size: 1rem;
+  font-weight: 600;
+  color: #6b7280;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.likert-button:hover {
+  border-color: #8b5cf6;
+  background: #f3e8ff;
+  color: #8b5cf6;
+}
+
+.likert-button.active {
+  background: #8b5cf6;
+  border-color: #8b5cf6;
+  color: white;
+}
+
+.yes-no-buttons {
+  display: flex;
+  gap: 0.5rem;
+}
+
+/* Character Detail Popup */
+.character-detail-dialog :deep(.p-dialog-header) {
+  padding: 1.25rem 1.5rem;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.character-detail-dialog :deep(.p-dialog-content) {
+  padding: 0;
+}
+
+.character-detail-content {
+  padding: 1.5rem;
+}
+
+.character-header-section {
+  display: flex;
+  align-items: center;
+  gap: 1.25rem;
+  margin-bottom: 1.5rem;
+  padding-bottom: 1.25rem;
+  border-bottom: 1px solid #f3f4f6;
+}
+
+.character-avatar-large {
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #e0e7ff 0%, #c7d2fe 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  flex-shrink: 0;
+  border: 3px solid #fff;
+  box-shadow: 0 4px 12px rgba(99, 102, 241, 0.2);
+}
+
+.character-avatar-large .avatar-image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.character-avatar-large .avatar-placeholder {
+  font-size: 2.5rem;
+  color: #6366f1;
+}
+
+.character-main-info {
+  flex: 1;
+}
+
+.character-main-info .character-name {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: #1f2937;
+  margin: 0 0 0.25rem 0;
+}
+
+.character-main-info .character-title {
+  font-size: 1rem;
+  color: #6366f1;
+  font-weight: 500;
+  margin: 0 0 0.5rem 0;
+}
+
+.character-main-info .character-department {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.9rem;
+  color: #6b7280;
+  margin: 0;
+}
+
+.character-main-info .character-department i {
+  font-size: 0.85rem;
+}
+
+.character-details-section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.character-details-section .detail-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.75rem 1rem;
+  background: #f9fafb;
+  border-radius: 8px;
+}
+
+.character-details-section .detail-row i {
+  color: #6366f1;
+  font-size: 1rem;
+  width: 20px;
+  text-align: center;
+}
+
+.character-details-section .detail-row span {
+  color: #374151;
+  font-size: 0.95rem;
+}
+
+.character-details-section .detail-description {
+  margin-top: 0.5rem;
+  padding: 1rem;
+  background: #f9fafb;
+  border-radius: 8px;
+  border-left: 3px solid #6366f1;
+}
+
+.character-details-section .detail-description p {
+  color: #4b5563;
+  line-height: 1.7;
+  margin: 0;
+  font-size: 0.95rem;
+}
+
+/* Character Info Blocks */
+.character-info-block {
+  margin-top: 1.25rem;
+  background: #f9fafb;
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.info-block-header {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  padding: 0.75rem 1rem;
+  background: linear-gradient(135deg, #e0e7ff 0%, #c7d2fe 100%);
+  font-weight: 600;
+  font-size: 0.9rem;
+  color: #4338ca;
+}
+
+.info-block-header i {
+  font-size: 1rem;
+}
+
+.info-block-content {
+  padding: 1rem;
+  color: #374151;
+  font-size: 0.9rem;
+  line-height: 1.7;
+}
+
+.info-block-content :deep(p) {
+  margin: 0 0 0.75rem 0;
+}
+
+.info-block-content :deep(p:last-child) {
+  margin-bottom: 0;
+}
+
+.info-block-content :deep(ul),
+.info-block-content :deep(ol) {
+  margin: 0.5rem 0;
+  padding-left: 1.25rem;
+}
+
+.info-block-content :deep(li) {
+  margin-bottom: 0.375rem;
+}
+
+.info-block-content :deep(strong) {
+  color: #1f2937;
+}
+
+.character-main-info .character-role {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.85rem;
+  color: #6b7280;
+  margin: 0.25rem 0 0 0;
+}
+
+.character-main-info .character-role i {
+  font-size: 0.8rem;
+}
+
+.character-detail-dialog :deep(.p-dialog-content) {
+  overflow-y: auto;
+  max-height: calc(90vh - 100px);
+}
+
+/* Instructions Popup */
+.instructions-popup-dialog :deep(.p-dialog-header) {
+  padding: 1.25rem 1.5rem;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.instructions-popup-dialog :deep(.p-dialog-content) {
+  padding: 0;
+}
+
+.instructions-popup-content {
+  padding: 1.5rem;
+}
+
+.instructions-exercise-title {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.75rem 1rem;
+  background: linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%);
+  border-radius: 8px;
+  margin-bottom: 1rem;
+  font-weight: 600;
+  color: #1e40af;
+}
+
+.instructions-exercise-title i {
+  font-size: 1rem;
+}
+
+.instructions-text {
+  color: #374151;
+  line-height: 1.8;
+  font-size: 0.95rem;
+}
+
+.instructions-text :deep(p) {
+  margin: 0 0 1rem 0;
+}
+
+.instructions-text :deep(p:last-child) {
+  margin-bottom: 0;
+}
+
+.instructions-text :deep(ul),
+.instructions-text :deep(ol) {
+  margin: 0.75rem 0;
+  padding-left: 1.5rem;
+}
+
+.instructions-text :deep(li) {
+  margin-bottom: 0.5rem;
+}
+
+.instructions-text :deep(strong) {
+  color: #1f2937;
+}
+
+/* Instructions Hint Button */
+.instructions-hint-btn {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.375rem 0.75rem;
+  background: rgba(255, 255, 255, 0.2);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  border-radius: 6px;
+  color: white;
+  font-size: 0.8rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.instructions-hint-btn:hover {
+  background: rgba(255, 255, 255, 0.3);
+  border-color: rgba(255, 255, 255, 0.5);
+}
+
+.instructions-hint-btn i {
+  font-size: 0.9rem;
 }
 </style>
