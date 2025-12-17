@@ -29,6 +29,7 @@ jobs:
         run: npm run build
         env:
           NODE_ENV: production
+          NUXT_PUBLIC_API_BASE_URL: https://api.vakamaka.com
 
       - name: Deploy to Server
         uses: appleboy/scp-action@v0.1.7
