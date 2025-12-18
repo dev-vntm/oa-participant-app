@@ -346,8 +346,8 @@
 
     <!-- Main Content -->
     <div class="workspace-content">
-      <!-- Left Sidebar: Sections -->
-      <div class="sections-sidebar">
+      <!-- Left Sidebar: Sections (Bölüm tamamlama mesajı gösterilirken gizle) -->
+      <div v-if="!showSectionCompletedMessage" class="sections-sidebar">
         <div class="sidebar-header">
           <h3>Bölümler</h3>
         </div>
@@ -479,11 +479,12 @@
         <div v-else-if="showSectionCompletedMessage" class="section-completed-overlay">
           <div class="completion-card">
             <div class="completion-icon">
-              <i class="pi pi-check-circle"></i>
+              <!-- Özel emoji varsa emoji göster, yoksa default ikon -->
+              <span v-if="completionMessage.emoji" class="completion-emoji-icon">{{ completionMessage.emoji }}</span>
+              <i v-else class="pi pi-check-circle"></i>
             </div>
             <h2>{{ completionMessage.title }}</h2>
             <p class="completion-text">{{ completionMessage.description }}</p>
-            <div class="completion-emoji">{{ completionMessage.emoji }}</div>
             <Button
               :label="nextSectionExists ? 'Sonraki Bölüme Geç' : 'Tamamla'"
               icon="pi pi-arrow-right"
@@ -1149,8 +1150,9 @@ const store = useParticipantAssessmentStore()
 const toast = useToast()
 const confirm = useConfirm()
 
-// App Version
-const appVersion = ref('1.0.0')
+// App Version (runtimeConfig'den alınır)
+const runtimeConfig = useRuntimeConfig()
+const appVersion = computed(() => runtimeConfig.public.appVersion || '1.0.0')
 
 // State
 // const showWelcomeDialog = ref(false) - REMOVED
@@ -2015,8 +2017,30 @@ onMounted(() => {
   window.addEventListener('keydown', handleSlideKeyboard)
 })
 
+// Browser geri/ileri butonlarını yönet
+const handlePopState = (event) => {
+  // Geri/ileri butonuna basıldığında, kullanıcıyı mevcut sayfada tut
+  // History'ye tekrar mevcut state'i ekle
+  window.history.pushState(null, '', window.location.href)
+  
+  // Kullanıcıya bilgi ver
+  toast.add({
+    severity: 'warn',
+    summary: 'Dikkat',
+    detail: 'Değerlendirme sırasında geri/ileri butonları kullanılamaz',
+    life: 3000
+  })
+}
+
+onMounted(() => {
+  // Browser history'yi yönet - geri gitmeyi engelle
+  window.history.pushState(null, '', window.location.href)
+  window.addEventListener('popstate', handlePopState)
+})
+
 onBeforeUnmount(() => {
   window.removeEventListener('keydown', handleSlideKeyboard)
+  window.removeEventListener('popstate', handlePopState)
 })
 
 // Sunum egzersizini görüntülenmiş olarak işaretle
@@ -3106,11 +3130,17 @@ onBeforeUnmount(() => {
 
 /* Section Completed Overlay - Modern Congratulations Screen */
 .section-completed-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
   display: flex;
   align-items: center;
   justify-content: center;
-  min-height: 600px;
   padding: 2rem;
+  background: rgba(255, 255, 255, 0.95);
+  z-index: 100;
   animation: fadeIn 0.6s ease-in-out;
 }
 
@@ -3139,6 +3169,18 @@ onBeforeUnmount(() => {
   background: white;
   border-radius: 50%;
   padding: 1rem;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+}
+
+.completion-emoji-icon {
+  display: block;
+  font-size: 4rem;
+  background: white;
+  border-radius: 50%;
+  width: 100px;
+  height: 100px;
+  line-height: 100px;
+  margin: 0 auto;
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
 }
 

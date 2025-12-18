@@ -1,5 +1,6 @@
 // https://nuxt.com/docs/api/configuration/nuxt-config
 import Aura from '@primeuix/themes/aura';
+import pkg from './package.json';
 
 export default defineNuxtConfig({
   compatibilityDate: '2025-07-15',
@@ -57,7 +58,8 @@ export default defineNuxtConfig({
     public: {
       // .env dosyasından okunur: NUXT_PUBLIC_API_BASE_URL
       apiBaseUrl: process.env.NUXT_PUBLIC_API_BASE_URL || 'https://api-dev.vakamaka.com',
-      appName: 'Vakamaka Online Assessment'
+      appName: 'Vakamaka Online Assessment',
+      appVersion: pkg.version
     }
   },
   
