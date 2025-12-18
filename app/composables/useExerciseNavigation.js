@@ -355,11 +355,6 @@ export function useExerciseNavigation(options = {}) {
    */
   const proceedToNextSection = async () => {
     try {
-      if (showSectionCompletedMessage) showSectionCompletedMessage.value = false
-      
-      // Envanter temizle
-      if (onCleanupInventory) onCleanupInventory()
-      
       // Mevcut bölümü bul ve sonraki bölümü hesapla
       const currentIdx = store.sections.findIndex(s => s.section_uuid === store.currentSectionId)
       const nextSection = currentIdx >= 0 && currentIdx < store.sections.length - 1 
@@ -367,6 +362,12 @@ export function useExerciseNavigation(options = {}) {
         : null
       
       if (nextSection) {
+        // Sonraki bölüme geçiyoruz - popup'ı kapat
+        if (showSectionCompletedMessage) showSectionCompletedMessage.value = false
+        
+        // Envanter temizle
+        if (onCleanupInventory) onCleanupInventory()
+        
         // Sonraki bölüme geç
         console.log('📍 Sonraki bölüme geçiliyor:', nextSection.section_title)
         store.setCurrentSection(nextSection.section_uuid)
@@ -378,18 +379,9 @@ export function useExerciseNavigation(options = {}) {
         // Timer'ı başlat
         if (onStartTimer) await onStartTimer(nextSection)
       } else {
-        // Tüm bölümler tamamlandı
-        toast.add({
-          severity: 'success',
-          summary: 'Tebrikler! 🎊',
-          detail: 'Tüm bölümleri başarıyla tamamladınız!',
-          life: 3000
-        })
-        
-        // Tamamlanma sayfasına yönlendir
-        setTimeout(() => {
-          router.push('/assessment/completed')
-        }, 2000)
+        // Tüm bölümler tamamlandı - popup'ı KAPATMADAN yönlendir
+        // Böylece yönlendirme sırasında arka plandaki egzersiz ekranı görünmez
+        router.push('/assessment/completed')
       }
     } catch (error) {
       console.error('Sonraki bölüme geçerken hata:', error)

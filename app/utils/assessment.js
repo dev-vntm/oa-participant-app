@@ -31,6 +31,7 @@ export function getSectionDuration(section) {
 export function formatQuestionType(type) {
   const types = {
     'multiple_choice': 'Çoktan Seçmeli',
+    'case_study': 'Çoktan Seçmeli',
     'essay': 'Kompozisyon',
     'practice': 'Uygulama',
     'analysis': 'Analiz',

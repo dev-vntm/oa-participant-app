@@ -307,7 +307,7 @@
         </div>
         
         <div class="header-actions">
-          <div class="inventory-btn-wrapper">
+          <div v-if="store.projectHasFiles" class="inventory-btn-wrapper">
             <Button
               icon="pi pi-folder-open"
               label="Vaka Dosyaları"
@@ -519,6 +519,12 @@
                     <span class="exercise-title-inline">{{ currentExercise.exercise_title }}</span>
                     <span class="exercise-type-badge-inline team_building">Ekip Kurma</span>
                   </template>
+                  <!-- Çoktan Seçmeli türünde egzersiz başlığı ve badge burada gösterilir -->
+                  <template v-if="currentExercise?.exercise_type === 'case_study'">
+                    <span class="title-separator">•</span>
+                    <span class="exercise-title-inline">{{ currentExercise.exercise_title }}</span>
+                    <span class="exercise-type-badge-inline case_study">Çoktan Seçmeli</span>
+                  </template>
                 </div>
                 <p class="section-subtitle" v-if="currentSection?.section_description" v-html="stripHtml(currentSection?.section_description)"></p>
               </div>
@@ -565,6 +571,18 @@
                   raised
                   class="complete-section-btn"
                 />
+                <!-- Çoktan Seçmeli (case_study) egzersizi için Kaydet butonu -->
+                <Button
+                  v-if="currentExercise?.exercise_type === 'case_study' && !isExerciseAnswered(currentExercise.exercise_uuid)"
+                  :label="isLastExerciseInSection ? 'Cevabı Kaydet ve Tamamla' : 'Cevabı Kaydet'"
+                  :icon="isLastExerciseInSection ? 'pi pi-check-circle' : 'pi pi-save'"
+                  :loading="savingExercise === currentExercise.exercise_uuid"
+                  :disabled="exerciseAnswers[currentExercise.exercise_uuid] === undefined || exerciseAnswers[currentExercise.exercise_uuid] === null || (Array.isArray(exerciseAnswers[currentExercise.exercise_uuid]) && exerciseAnswers[currentExercise.exercise_uuid].length === 0)"
+                  @click="saveCaseStudyAnswer(currentExercise)"
+                  severity="success"
+                  raised
+                  class="complete-section-btn"
+                />
                 <!-- Sunum egzersizi için Bölümü Tamamla (son slide'da görünür) -->
                 <Transition name="slide-fade">
                   <Button
@@ -605,7 +623,7 @@
 
           <!-- Modern Single Exercise View (for other section types) -->
           <div v-else class="modern-exercise-container" v-if="currentExercise">
-            <div class="exercise-navigation" v-if="currentSectionExercises.length > 1">
+            <div class="exercise-navigation" v-if="currentSectionExercises.length > 1 && currentExercise.exercise_type !== 'case_study'">
               <!-- Önceki Egzersiz -->
               <div v-if="currentExerciseIndex > 0" class="nav-button-wrapper">
                 <Button
@@ -655,7 +673,8 @@
 
             <div class="modern-exercise-card" :class="{ 
               'info-type-card': currentExercise.exercise_type === 'info' || currentExercise.exercise_type === 'Bilgilendirme',
-              'presentation-type-card': currentExercise.exercise_type === 'presentation'
+              'presentation-type-card': currentExercise.exercise_type === 'presentation',
+              'case-study-type-card': currentExercise.exercise_type === 'case_study'
             }">
               
               <!-- Scrollable Content Area (Presentation türünde gizlenir) -->
@@ -720,18 +739,99 @@
                 </div>
               </div>
 
-              <!-- Answer Section (Bilgilendirme, Sunum ve Ekip Kurma değilse) -->
+              <!-- Çoktan Seçmeli Egzersiz (Case Study) -->
+              <div v-else-if="currentExercise.exercise_type === 'case_study'" class="case-study-section">
+                <div class="case-study-options">
+                  <div class="options-header">
+                    <label class="options-label">
+                      <i class="pi pi-list"></i>
+                      <span>{{ isExerciseAnswered(currentExercise.exercise_uuid) ? 'Seçiminiz (Kaydedildi)' : 'Seçenekler' }}</span>
+                    </label>
+                    <span v-if="currentExercise.options?.allow_multiple" class="multiple-hint">
+                      <i class="pi pi-info-circle"></i>
+                      Birden fazla seçenek işaretleyebilirsiniz
+                    </span>
+                  </div>
+                  
+                  <!-- Tek Seçim (Radio) -->
+                  <div v-if="!currentExercise.options?.allow_multiple" class="options-list single-select">
+                    <div 
+                      v-for="(choice, index) in currentExercise.options?.choices || []" 
+                      :key="index"
+                      class="option-item"
+                      :class="{ 
+                        'selected': exerciseAnswers[currentExercise.exercise_uuid] === index,
+                        'disabled': isExerciseAnswered(currentExercise.exercise_uuid)
+                      }"
+                      @click="!isExerciseAnswered(currentExercise.exercise_uuid) && selectOption(currentExercise.exercise_uuid, index)"
+                    >
+                      <div class="option-radio">
+                        <RadioButton 
+                          :inputId="'option-' + currentExercise.exercise_uuid + '-' + index"
+                          :name="'options-' + currentExercise.exercise_uuid"
+                          :value="index"
+                          v-model="exerciseAnswers[currentExercise.exercise_uuid]"
+                          :disabled="isExerciseAnswered(currentExercise.exercise_uuid)"
+                        />
+                      </div>
+                      <label :for="'option-' + currentExercise.exercise_uuid + '-' + index" class="option-text">
+                        <span class="option-letter">{{ String.fromCharCode(65 + index) }}.</span>
+                        {{ choice.text }}
+                      </label>
+                    </div>
+                  </div>
+                  
+                  <!-- Çoklu Seçim (Checkbox) -->
+                  <div v-else class="options-list multi-select">
+                    <div 
+                      v-for="(choice, index) in currentExercise.options?.choices || []" 
+                      :key="index"
+                      class="option-item"
+                      :class="{ 
+                        'selected': (exerciseAnswers[currentExercise.exercise_uuid] || []).includes(index),
+                        'disabled': isExerciseAnswered(currentExercise.exercise_uuid)
+                      }"
+                      @click="!isExerciseAnswered(currentExercise.exercise_uuid) && toggleOption(currentExercise.exercise_uuid, index)"
+                    >
+                      <div class="option-checkbox">
+                        <Checkbox 
+                          :inputId="'option-' + currentExercise.exercise_uuid + '-' + index"
+                          :value="index"
+                          v-model="exerciseAnswers[currentExercise.exercise_uuid]"
+                          :disabled="isExerciseAnswered(currentExercise.exercise_uuid)"
+                        />
+                      </div>
+                      <label :for="'option-' + currentExercise.exercise_uuid + '-' + index" class="option-text">
+                        <span class="option-letter">{{ String.fromCharCode(65 + index) }}.</span>
+                        {{ choice.text }}
+                      </label>
+                    </div>
+                  </div>
+                </div>
+                
+                <!-- Cevap kaydedildiyse bilgi mesajı göster -->
+                <div v-if="isExerciseAnswered(currentExercise.exercise_uuid)" class="answer-locked-info case-study-locked">
+                  <i class="pi pi-lock"></i>
+                  <span>Bu egzersiz için seçiminiz kaydedildi. Artık değişiklik yapamazsınız.</span>
+                </div>
+              </div>
+
+              <!-- Answer Section (Bilgilendirme, Sunum, Ekip Kurma ve Çoktan Seçmeli değilse) -->
               <div v-else-if="currentExercise.exercise_type !== 'info' && currentExercise.exercise_type !== 'Bilgilendirme' && currentExercise.exercise_type !== 'presentation' && currentExercise.exercise_type !== 'team_building'" 
                    class="modern-answer-section"
                    :class="{ 'analysis-report-section': currentExercise.exercise_type === 'analysis' }">
                 <div class="answer-header">
                   <label class="answer-label">
                     <i :class="currentExercise.exercise_type === 'analysis' ? 'pi pi-file-edit' : 'pi pi-pencil'"></i>
-                    {{ currentExercise.exercise_type === 'analysis' 
-                        ? (isExerciseAnswered(currentExercise.exercise_uuid) ? 'Analiz Raporunuz (Kaydedildi)' : 'Analiz Raporunuz')
-                        : (isExerciseAnswered(currentExercise.exercise_uuid) ? 'Kaydedilen Cevabınız (Düzenlenemez)' : 'Cevabınız') 
-                    }}
+                    <span v-if="currentExercise.exercise_type === 'analysis' && currentExercise.instructions" v-html="currentExercise.instructions"></span>
+                    <template v-else-if="currentExercise.exercise_type === 'analysis'">
+                      {{ isExerciseAnswered(currentExercise.exercise_uuid) ? 'Analiz Raporunuz (Kaydedildi)' : 'Analiz Raporunuz' }}
+                    </template>
+                    <template v-else>
+                      {{ isExerciseAnswered(currentExercise.exercise_uuid) ? 'Kaydedilen Cevabınız (Düzenlenemez)' : 'Cevabınız' }}
+                    </template>
                   </label>
+                  <!-- TODO: Ses kaydı özelliği ilerleyen sürümlerde aktif olacak
                   <Button
                     v-if="!isExerciseAnswered(currentExercise.exercise_uuid)"
                     label="Ses Kaydı Ekle"
@@ -741,6 +841,7 @@
                     size="small"
                     class="audio-record-btn"
                   />
+                  -->
                 </div>
                 <TipTapEditor
                   v-model="exerciseAnswers[currentExercise.exercise_uuid]"
@@ -1417,6 +1518,88 @@ const getEditorPlaceholder = (exercise) => {
   }
   
   return 'Düşüncelerinizi buraya yazabilirsiniz...'
+}
+
+// Çoktan seçmeli (case_study) - Tek seçim
+const selectOption = (exerciseUuid, optionIndex) => {
+  exerciseAnswers.value[exerciseUuid] = optionIndex
+}
+
+// Çoktan seçmeli (case_study) - Çoklu seçim toggle
+const toggleOption = (exerciseUuid, optionIndex) => {
+  if (!exerciseAnswers.value[exerciseUuid]) {
+    exerciseAnswers.value[exerciseUuid] = []
+  }
+  
+  const currentSelection = exerciseAnswers.value[exerciseUuid]
+  const index = currentSelection.indexOf(optionIndex)
+  
+  if (index === -1) {
+    currentSelection.push(optionIndex)
+  } else {
+    currentSelection.splice(index, 1)
+  }
+}
+
+// Çoktan seçmeli (case_study) cevabını kaydet ve sonraki egzersize geç
+const saveCaseStudyAnswer = async (exercise) => {
+  const answer = exerciseAnswers.value[exercise.exercise_uuid]
+  if (answer === undefined || answer === null) return
+  
+  // Seçilen seçenek(ler)i metin olarak formatla
+  const options = exercise.options?.choices || []
+  let answerText = ''
+  
+  if (Array.isArray(answer)) {
+    // Çoklu seçim
+    const selectedTexts = answer.map(idx => {
+      const opt = options[idx]
+      return opt ? (opt.text || opt) : ''
+    }).filter(t => t)
+    answerText = selectedTexts.join('\n---\n')
+  } else {
+    // Tek seçim
+    const opt = options[answer]
+    answerText = opt ? (opt.text || opt) : ''
+  }
+  
+  // Cevabı kaydet
+  savingExercise.value = exercise.exercise_uuid
+  
+  try {
+    await store.saveResponse({
+      section_uuid: store.currentSectionId || currentSection.value?.section_uuid,
+      exercise_uuid: exercise.exercise_uuid,
+      answer_text: answerText,
+      answer_value: JSON.stringify(answer),
+      time_spent: Math.floor((Date.now() - currentExerciseStartTime.value) / 1000)
+    })
+    
+    toast.add({
+      severity: 'success',
+      summary: 'Kaydedildi',
+      detail: 'Cevabınız başarıyla kaydedildi',
+      life: 2000
+    })
+    
+    // Sonraki egzersize geç veya bölümü tamamla
+    if (isLastExerciseInSection.value) {
+      await completeSectionAndNext()
+    } else {
+      goToNextExercise()
+      currentExerciseStartTime.value = Date.now()
+    }
+  } catch (error) {
+    console.error('Cevap kaydetme hatası:', error)
+    toast.add({
+      severity: 'error',
+      summary: 'Hata',
+      detail: 'Cevap kaydedilemedi, lütfen tekrar deneyin',
+      life: 3000
+    })
+  } finally {
+    savingExercise.value = null
+  }
 }
 
 const startWorkspace = async () => {
@@ -3080,6 +3263,12 @@ onBeforeUnmount(() => {
   backdrop-filter: blur(4px);
 }
 
+.exercise-type-badge-inline.case_study {
+  background: rgba(99, 102, 241, 0.3);
+  color: white;
+  backdrop-filter: blur(4px);
+}
+
 .section-subtitle {
   font-size: 0.875rem;
   margin: 0;
@@ -3139,12 +3328,13 @@ onBeforeUnmount(() => {
   padding: 1rem 1.25rem;
   max-width: 100%;
   width: 100%;
-  overflow-y: auto;
+  overflow: hidden;
   flex: 1;
   margin: 0 auto;
   margin-bottom: 1rem;
   display: flex;
   flex-direction: column;
+  min-height: 0;
 }
 
 .exercise-navigation {
@@ -3255,6 +3445,10 @@ onBeforeUnmount(() => {
   transition: transform 0.2s, box-shadow 0.2s;
   overflow: hidden;
   word-wrap: break-word;
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
 }
 
 /* Info Type Card - Flex Container with Sticky Footer */
@@ -3274,12 +3468,32 @@ onBeforeUnmount(() => {
   overflow: hidden;
 }
 
+/* Case Study Type Card - Scrollable */
+.modern-exercise-card.case-study-type-card {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.modern-exercise-card.case-study-type-card .exercise-content-area {
+  flex: 0 0 auto;
+  overflow: visible;
+}
+
+.modern-exercise-card.case-study-type-card .case-study-section {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+
 /* Scrollable Content Area */
 .exercise-content-area {
   flex: 1;
   overflow-y: auto;
   overflow-x: hidden;
-  padding-bottom: 1rem;
+  padding-bottom: 0.5rem;
 }
 
 .exercise-card-header {
@@ -3496,6 +3710,144 @@ onBeforeUnmount(() => {
 }
 
 .team-building-actions {
+  margin-top: 1.5rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid #e2e8f0;
+}
+
+/* Çoktan Seçmeli Egzersiz (Case Study) */
+.case-study-section {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  padding: 0.5rem 1.5rem 1rem;
+  overflow-y: auto !important;
+  overflow-x: hidden;
+  min-height: 0;
+  max-height: 100%;
+}
+
+.case-study-options {
+  flex: 0 0 auto;
+  padding-bottom: 2rem;
+}
+
+.options-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.75rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 2px solid #e2e8f0;
+}
+
+.options-label {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: #1e293b;
+}
+
+.options-label i {
+  color: #6366f1;
+}
+
+.multiple-hint {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.85rem;
+  color: #64748b;
+  background: #f1f5f9;
+  padding: 0.35rem 0.75rem;
+  border-radius: 20px;
+}
+
+.multiple-hint i {
+  color: #6366f1;
+}
+
+.options-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.option-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 1rem;
+  padding: 1rem 1.25rem;
+  background: #f8fafc;
+  border: 2px solid #e2e8f0;
+  border-radius: 12px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.option-item:hover:not(.disabled) {
+  background: #f1f5f9;
+  border-color: #cbd5e1;
+  transform: translateX(4px);
+}
+
+.option-item.selected {
+  background: linear-gradient(135deg, #eef2ff 0%, #e0e7ff 100%);
+  border-color: #6366f1;
+  box-shadow: 0 4px 12px rgba(99, 102, 241, 0.15);
+}
+
+.option-item.selected:hover {
+  background: linear-gradient(135deg, #e0e7ff 0%, #c7d2fe 100%);
+}
+
+.option-item.disabled {
+  cursor: not-allowed;
+  opacity: 0.7;
+}
+
+.option-radio,
+.option-checkbox {
+  flex-shrink: 0;
+  padding-top: 2px;
+}
+
+.option-text {
+  flex: 1;
+  font-size: 1rem;
+  line-height: 1.6;
+  color: #334155;
+  cursor: pointer;
+}
+
+.option-letter {
+  display: inline-block;
+  font-weight: 700;
+  color: #6366f1;
+  margin-right: 0.5rem;
+  min-width: 1.5rem;
+}
+
+.option-item.selected .option-text {
+  color: #1e293b;
+  font-weight: 500;
+}
+
+.option-item.selected .option-letter {
+  color: #4f46e5;
+}
+
+.case-study-locked {
+  margin-top: 1.25rem;
+}
+
+.case-study-actions {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  justify-content: center;
   margin-top: 1.5rem;
   padding-top: 1.5rem;
   border-top: 1px solid #e2e8f0;

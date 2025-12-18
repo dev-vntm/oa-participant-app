@@ -19,6 +19,7 @@ export const useParticipantAssessmentStore = defineStore('participantAssessment'
     projectUUID: null, // Alias için
     projectName: null,
     projectWelcomeMessage: null, // Karşılama mesajı (HTML)
+    projectHasFiles: false, // Vaka dosyaları var mı?
     project: null,
     
     // Assessment data
@@ -294,6 +295,7 @@ export const useParticipantAssessmentStore = defineStore('participantAssessment'
           this.projectUuid = response.data.project.project_uuid
           this.projectUUID = response.data.project.project_uuid // Alias
           this.projectWelcomeMessage = response.data.project.welcome_message || null
+          this.projectHasFiles = response.data.project.has_files || false
           
           // Backend'den zaten sıralı gelir (ps.order ASC), ama emin olmak için tekrar sırala
           console.log('📊 Sections BEFORE filter:', response.data.sections.map(s => ({ title: s.section_title, order: s.order })))
