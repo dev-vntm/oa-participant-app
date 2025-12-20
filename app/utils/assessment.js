@@ -36,7 +36,8 @@ export function formatQuestionType(type) {
     'practice': 'Uygulama',
     'analysis': 'Analiz',
     'info': 'Bilgilendirme',
-    'team_building': 'Ekip Kurma'
+    'team_building': 'Ekip Kurma',
+    'presentation': 'Sunum'
   }
   return types[type] || type
 }

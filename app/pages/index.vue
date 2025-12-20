@@ -495,6 +495,63 @@
           </div>
         </div>
 
+        <!-- Section Start Screen - Bölüm başlangıç ekranı -->
+        <div v-else-if="!isSectionStarted" class="section-start-screen">
+          <div class="start-screen-content">
+            <div class="start-screen-header">
+              <div class="start-screen-icon">
+                <i class="pi pi-bookmark-fill"></i>
+              </div>
+              <h1 class="start-screen-title">{{ currentSection?.section_title }}</h1>
+              <div class="section-meta">
+                <span class="meta-item">
+                  <i class="pi pi-list"></i>
+                  {{ currentSectionExercises.length }} Egzersiz
+                </span>
+                <span class="meta-item" v-if="currentSection?.duration">
+                  <i class="pi pi-clock"></i>
+                  {{ currentSection.duration }} Dakika
+                </span>
+              </div>
+            </div>
+            
+            <div class="start-screen-description" v-if="currentSection?.section_description">
+              <h3><i class="pi pi-info-circle"></i> Bölüm Açıklaması</h3>
+              <div class="description-content" v-html="currentSection.section_description"></div>
+            </div>
+            
+            <div class="start-screen-exercises">
+              <h3><i class="pi pi-list-check"></i> Bu Bölümdeki Egzersizler</h3>
+              <ul class="exercise-list">
+                <li v-for="(exercise, idx) in currentSectionExercises" :key="exercise.exercise_uuid" class="exercise-list-item">
+                  <span class="exercise-number">{{ idx + 1 }}</span>
+                  <span class="exercise-name">{{ exercise.exercise_title }}</span>
+                  <span class="exercise-type-tag" :class="exercise.exercise_type">
+                    {{ formatQuestionType(exercise.exercise_type) }}
+                  </span>
+                </li>
+              </ul>
+            </div>
+            
+            <div class="start-screen-action">
+              <Button
+                label="Bölüme Başla"
+                icon="pi pi-play"
+                iconPos="right"
+                severity="success"
+                size="large"
+                raised
+                @click="startSection"
+                class="start-section-btn"
+              />
+              <p class="start-hint">
+                <i class="pi pi-info-circle"></i>
+                Bölüme başladığınızda süre sayacı otomatik olarak başlayacaktır.
+              </p>
+            </div>
+          </div>
+        </div>
+
         <div v-else class="exercises-container">
           <!-- Modern Section Header with Action Button -->
           <div class="modern-section-header">
@@ -502,32 +559,14 @@
               <div class="header-title-area">
                 <div class="title-with-badge">
                   <h1 class="section-title">{{ currentSection?.section_title }}</h1>
-                  <!-- Presentation türünde egzersiz başlığı ve badge burada gösterilir -->
-                  <template v-if="currentExercise?.exercise_type === 'presentation'">
-                    <span class="title-separator">•</span>
-                    <span class="exercise-title-inline">{{ currentExercise.exercise_title }}</span>
-                    <span class="exercise-type-badge-inline presentation">Sunum</span>
-                  </template>
-                  <!-- Analiz türünde egzersiz başlığı ve badge burada gösterilir -->
-                  <template v-if="currentExercise?.exercise_type === 'analysis'">
-                    <span class="title-separator">•</span>
-                    <span class="exercise-title-inline">{{ currentExercise.exercise_title }}</span>
-                    <span class="exercise-type-badge-inline analysis">Analiz</span>
-                  </template>
-                  <!-- Ekip Kurma türünde egzersiz başlığı ve badge burada gösterilir -->
-                  <template v-if="currentExercise?.exercise_type === 'team_building'">
-                    <span class="title-separator">•</span>
-                    <span class="exercise-title-inline">{{ currentExercise.exercise_title }}</span>
-                    <span class="exercise-type-badge-inline team_building">Ekip Kurma</span>
-                  </template>
-                  <!-- Çoktan Seçmeli türünde egzersiz başlığı ve badge burada gösterilir -->
-                  <template v-if="currentExercise?.exercise_type === 'case_study'">
-                    <span class="title-separator">•</span>
-                    <span class="exercise-title-inline">{{ currentExercise.exercise_title }}</span>
-                    <span class="exercise-type-badge-inline case_study">Çoktan Seçmeli</span>
-                  </template>
                 </div>
-                <p class="section-subtitle" v-if="currentSection?.section_description" v-html="stripHtml(currentSection?.section_description)"></p>
+                <!-- Egzersiz başlığı ve türü - tüm egzersiz türleri için gösterilir -->
+                <div class="exercise-info-line" v-if="currentExercise">
+                  <span class="exercise-title-inline">{{ currentExercise.exercise_title }}</span>
+                  <span class="exercise-type-badge-inline" :class="currentExercise.exercise_type">
+                    {{ formatQuestionType(currentExercise.exercise_type) }}
+                  </span>
+                </div>
               </div>
               <div class="header-actions-row">
                 <div class="progress-stats">
@@ -595,6 +634,20 @@
                     raised
                     @click="markPresentationAsViewed(currentExercise)"
                     class="complete-section-btn presentation-complete-btn"
+                  />
+                </Transition>
+                <!-- Analiz egzersizi için Cevabı Kaydet (cevap girildiğinde görünür) -->
+                <Transition name="slide-fade">
+                  <Button
+                    v-if="currentExercise?.exercise_type === 'analysis' && !isExerciseAnswered(currentExercise.exercise_uuid) && hasAnalysisContent"
+                    :label="isLastExerciseInSection ? 'Kaydet ve Bölümü Tamamla' : 'Cevabı Kaydet'"
+                    :icon="isLastExerciseInSection ? 'pi pi-check-circle' : 'pi pi-save'"
+                    iconPos="right"
+                    severity="success"
+                    raised
+                    :loading="savingExercise === currentExercise.exercise_uuid"
+                    @click="confirmAndSave(currentExercise)"
+                    class="complete-section-btn analysis-save-btn"
                   />
                 </Transition>
               </div>
@@ -678,8 +731,8 @@
               'case-study-type-card': currentExercise.exercise_type === 'case_study'
             }">
               
-              <!-- Scrollable Content Area (Presentation türünde gizlenir) -->
-              <div class="exercise-content-area" v-if="currentExercise.exercise_type !== 'presentation'">
+              <!-- Scrollable Content Area (Presentation, Analiz ve Ekip Kurma türünde gizlenir) -->
+              <div class="exercise-content-area" v-if="currentExercise.exercise_type !== 'presentation' && currentExercise.exercise_type !== 'analysis' && currentExercise.exercise_type !== 'team_building'">
                 <!-- Exercise Header (Analiz ve Ekip Kurma türünde gizlenir - başlık section header'da) -->
                 <div class="exercise-card-header" v-if="currentExercise.exercise_type !== 'analysis' && currentExercise.exercise_type !== 'team_building'">
                   <h2 class="exercise-title">{{ currentExercise.exercise_title }}</h2>
@@ -873,7 +926,8 @@
                   <span>Bu egzersiz için cevabınız kaydedildi. Artık değişiklik yapamazsınız.</span>
                 </div>
                 
-                <div v-else class="answer-actions-modern">
+                <!-- Analiz egzersizleri için alt butonlar gösterilmez - sağ üstteki buton kullanılır -->
+                <div v-else-if="currentExercise.exercise_type !== 'analysis'" class="answer-actions-modern">
                   <!-- Navigasyon: Önceki Egzersiz -->
                   <Button
                     v-if="currentExerciseIndex > 0"
@@ -1230,6 +1284,37 @@ const selfEvaluationQuestions = ref([])
 const selfEvaluationAnswers = ref({})
 const showInventorySidebar = ref(false) // Bölüm envanteri sidebar visibility
 
+// Bölüm başlangıç ekranı state'i - her bölüm için ayrı takip
+const startedSections = ref(new Set())
+
+// Bölüm başlatıldı mı kontrolü
+const isSectionStarted = computed(() => {
+  if (!currentSection.value?.section_uuid) return false
+  return startedSections.value.has(currentSection.value.section_uuid)
+})
+
+// Bölümü başlat
+const startSection = async () => {
+  if (currentSection.value?.section_uuid) {
+    startedSections.value.add(currentSection.value.section_uuid)
+    // Timer'ı bölüm bilgisiyle başlat
+    await startTimer(currentSection.value)
+    
+    // Eğer ilk egzersiz presentation ise, DOM güncellemesinden sonra slide'ı yeniden render et
+    const firstExercise = currentSectionExercises.value?.[0]
+    if (firstExercise?.exercise_type === 'presentation') {
+      // DOM'un tamamen güncellenmesi için biraz bekle
+      setTimeout(async () => {
+        await nextTick()
+        if (pdfDoc && pdfCanvas.value) {
+          console.log('📽️ Bölüm başladı, sunum ilk sayfası render ediliyor')
+          await renderPage(1)
+        }
+      }, 300)
+    }
+  }
+}
+
 // Computed
 const currentSection = computed(() => store.currentSection)
 const currentSectionExercises = computed(() => store.currentSectionExercises)
@@ -1498,6 +1583,16 @@ const nextSectionExists = computed(() => {
   if (!store.currentSectionId) return false
   const currentIndex = store.sections.findIndex(s => s.section_uuid === store.currentSectionId)
   return currentIndex >= 0 && currentIndex < store.sections.length - 1
+})
+
+// Analiz egzersizi için gerçek içerik kontrolü (HTML tagları hariç)
+const hasAnalysisContent = computed(() => {
+  if (!currentExercise.value) return false
+  const content = exerciseAnswers.value[currentExercise.value.exercise_uuid]
+  if (!content) return false
+  // HTML taglarını temizle ve boşlukları kontrol et
+  const textContent = content.replace(/<[^>]*>/g, '').replace(/&nbsp;/g, ' ').trim()
+  return textContent.length > 0
 })
 
 // Methods
@@ -2045,6 +2140,20 @@ onBeforeUnmount(() => {
 
 // Sunum egzersizini görüntülenmiş olarak işaretle
 const markPresentationAsViewed = async (exercise) => {
+  // Eğer sunum zaten izlenmişse, sadece sonraki egzersize geç (tekrar kaydetme)
+  if (isExerciseAnswered(exercise.exercise_uuid)) {
+    console.log('📽️ Sunum zaten izlenmiş, sonraki egzersize geçiliyor')
+    
+    // Son egzersizse bölümü tamamla
+    if (currentExerciseIndex.value >= currentSectionExercises.value.length - 1) {
+      await completeSectionAndNext()
+    } else {
+      // Sonraki egzersize geç
+      currentExerciseIndex.value++
+    }
+    return
+  }
+  
   savingExercise.value = exercise.exercise_uuid
   
   try {
@@ -2098,15 +2207,21 @@ const checkAndShowInstructions = () => {
     seenInstructions: Array.from(seenInstructions.value)
   })
   
-  if (store.hasStartedUI && hasUnseenInstructions.value && !showSectionCompletedMessage.value) {
-    console.log('📋 Bölüm talimatları popup açılıyor:', currentSection.value?.section_title)
-    showInstructionsPopup.value = true
-  }
+  // Artık Section Start Screen olduğu için otomatik popup açılmıyor
+  // Manuel olarak "Talimatlar" butonundan açılabilir
+  // if (store.hasStartedUI && hasUnseenInstructions.value && !showSectionCompletedMessage.value) {
+  //   console.log('📋 Bölüm talimatları popup açılıyor:', currentSection.value?.section_title)
+  //   showInstructionsPopup.value = true
+  // }
 }
 
-// Bölüm değiştiğinde kontrol et
-watch(() => currentSection.value?.section_uuid, (newUuid, oldUuid) => {
+// Bölüm değiştiğinde kontrol et ve detayları yükle
+watch(() => currentSection.value?.section_uuid, async (newUuid, oldUuid) => {
   if (newUuid && newUuid !== oldUuid) {
+    // Bölüm detaylarını yükle (egzersiz listesi için gerekli)
+    console.log('📦 Bölüm değişti, detaylar yükleniyor:', newUuid)
+    await store.fetchSectionDetails(newUuid)
+    
     setTimeout(() => {
       nextTick(() => checkAndShowInstructions())
     }, 300)
@@ -2114,8 +2229,12 @@ watch(() => currentSection.value?.section_uuid, (newUuid, oldUuid) => {
 })
 
 // UI başladığında da kontrol et (ilk bölüm için)
-watch(() => store.hasStartedUI, (started) => {
-  if (started) {
+watch(() => store.hasStartedUI, async (started) => {
+  if (started && store.currentSectionId) {
+    // İlk bölümün detaylarını yükle (egzersiz listesi için gerekli)
+    console.log('📦 UI başladı, ilk bölüm detayları yükleniyor:', store.currentSectionId)
+    await store.fetchSectionDetails(store.currentSectionId)
+    
     setTimeout(() => {
       nextTick(() => checkAndShowInstructions())
     }, 500)
@@ -2235,11 +2354,20 @@ onMounted(async () => {
     }
     
     // Eğer daha önce başlatılmışsa timer'ı kontrol et
+    // Backend'den remaining_time kontrolü yaparak bölümün başlatılıp başlatılmadığını anla
     if (store.hasStartedUI && store.currentSectionId) {
       const section = store.sections.find(s => s.section_uuid === store.currentSectionId)
       if (section) {
-        // Composable'daki resumeTimer kullan
-        await resumeTimer(section)
+        // Backend'den kalan süreyi kontrol et
+        const timeResult = await store.fetchRemainingTime()
+        if (timeResult.success && timeResult.data.remaining_seconds > 0) {
+          // Backend'de süre varsa, bölüm daha önce başlatılmış demektir
+          console.log('🔄 Bölüm daha önce başlatılmış, timer resume ediliyor')
+          startedSections.value.add(store.currentSectionId)
+          await resumeTimer(section)
+        } else {
+          console.log('📋 Bölüm henüz başlatılmamış, Section Start Screen gösterilecek')
+        }
       }
     }
     
@@ -2263,22 +2391,14 @@ onMounted(async () => {
   }
 })
 
-// Watch: Dosya varsa sidebar'ı otomatik aç (sadece ilk kez veya bölüm değişince)
-watch(() => [store.currentSectionId, hasDocumentsInCurrentSection.value], ([newSectionId, hasDocuments], oldValue) => {
-  // oldValue ilk çalıştırmada undefined olabilir
-  const oldSectionId = oldValue ? oldValue[0] : undefined
-  
-  // Bölüm değiştiğinde veya ilk yüklemede
-  if (newSectionId !== oldSectionId || oldSectionId === undefined) {
-    if (hasDocuments) {
-      console.log('📂 Dosya var, sidebar açılıyor')
-      showInventorySidebar.value = true
-    } else {
-      console.log('📂 Dosya yok, sidebar kapalı')
-      showInventorySidebar.value = false
-    }
+// Watch: Bölüm değiştiğinde sidebar'ı kapat (otomatik açma kaldırıldı - sadece butonla açılır)
+watch(() => store.currentSectionId, (newSectionId, oldSectionId) => {
+  // Bölüm değiştiğinde sidebar'ı kapat
+  if (newSectionId !== oldSectionId) {
+    showInventorySidebar.value = false
+    console.log('📂 Bölüm değişti, sidebar kapatıldı')
   }
-}, { immediate: true })
+})
 
 // Cleanup
 onBeforeUnmount(() => {
@@ -2577,6 +2697,7 @@ onBeforeUnmount(() => {
 
 .section-info {
   flex: 1;
+  text-align: left;
 }
 
 .section-info h4 {
@@ -2588,6 +2709,7 @@ onBeforeUnmount(() => {
 
 .section-meta {
   display: flex;
+  justify-content: flex-start;
   gap: 0.75rem;
   font-size: 0.75rem;
   color: #6b7280;
@@ -2596,7 +2718,7 @@ onBeforeUnmount(() => {
 
 .section-meta span {
   display: flex;
-  align-items: center;
+  align-items: start;
   gap: 0.25rem;
 }
 
@@ -3222,6 +3344,230 @@ onBeforeUnmount(() => {
 .next-section-button:hover {
   transform: translateY(-2px);
   box-shadow: 0 6px 20px rgba(0, 0, 0, 0.25);
+}
+
+/* Section Start Screen */
+.section-start-screen {
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  padding: 2rem;
+  min-height: 100%;
+  background: linear-gradient(135deg, #f5f7fa 0%, #e4e8ec 100%);
+}
+
+.start-screen-content {
+  max-width: 700px;
+  width: 100%;
+  background: white;
+  border-radius: 16px;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.1);
+  overflow: hidden;
+}
+
+.start-screen-header {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  padding: 2rem;
+  text-align: center;
+  color: white;
+}
+
+.start-screen-icon {
+  width: 64px;
+  height: 64px;
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto 1rem;
+}
+
+.start-screen-icon i {
+  font-size: 1.75rem;
+}
+
+.start-screen-title {
+  font-size: 1.75rem;
+  font-weight: 700;
+  margin: 0 0 1rem;
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.section-meta {
+  display: flex;
+  justify-content: start;
+  gap: 1.5rem;
+  flex-wrap: wrap;
+}
+
+.section-meta .meta-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.95rem;
+  opacity: 0.9;
+}
+
+.start-screen-description {
+  padding: 1.5rem 2rem;
+  border-bottom: 1px solid #eee;
+}
+
+.start-screen-description h3 {
+  font-size: 1rem;
+  font-weight: 600;
+  color: #667eea;
+  margin: 0 0 0.75rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.start-screen-description .description-content {
+  font-size: 0.95rem;
+  color: #4a5568;
+  line-height: 1.7;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.start-screen-description .description-content :deep(p) {
+  margin-bottom: 1rem !important;
+}
+
+.start-screen-description .description-content :deep(ul) {
+  margin-bottom: 1rem;
+  padding-left: 1.5rem;
+  list-style-type: disc;
+}
+
+.start-screen-description .description-content :deep(ol) {
+  margin-bottom: 1rem;
+  padding-left: 1.5rem;
+  list-style-type: decimal;
+}
+
+.start-screen-description .description-content :deep(li) {
+  margin-bottom: 0.5rem;
+  display: list-item;
+}
+.start-screen-exercises {
+  padding: 1.5rem 2rem;
+  border-bottom: 1px solid #eee;
+}
+
+.start-screen-exercises h3 {
+  font-size: 1rem;
+  font-weight: 600;
+  color: #667eea;
+  margin: 0 0 1rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.exercise-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.exercise-list-item {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.75rem;
+  background: #f8f9fa;
+  border-radius: 8px;
+  margin-bottom: 0.5rem;
+}
+
+.exercise-list-item:last-child {
+  margin-bottom: 0;
+}
+
+.exercise-number {
+  width: 28px;
+  height: 28px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.8rem;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+
+.exercise-name {
+  flex: 1;
+  font-size: 0.9rem;
+  color: #2d3748;
+  font-weight: 500;
+}
+
+.exercise-type-tag {
+  font-size: 0.7rem;
+  padding: 0.25rem 0.5rem;
+  border-radius: 4px;
+  font-weight: 600;
+  text-transform: uppercase;
+  background: #e2e8f0;
+  color: #4a5568;
+}
+
+.exercise-type-tag.presentation { background: #fed7e2; color: #97266d; }
+.exercise-type-tag.analysis { background: #c6f6d5; color: #276749; }
+.exercise-type-tag.team_building { background: #bee3f8; color: #2b6cb0; }
+.exercise-type-tag.case_study { background: #feebc8; color: #c05621; }
+.exercise-type-tag.info { background: #e9d8fd; color: #6b46c1; }
+
+.start-screen-action {
+  padding: 1.5rem 2rem;
+  text-align: center;
+}
+
+.start-section-btn {
+  min-width: 200px;
+  font-size: 1.1rem;
+  padding: 0.875rem 2rem;
+}
+
+.start-hint {
+  font-size: 0.85rem;
+  color: #718096;
+  margin: 1rem 0 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+}
+
+/* Exercise Info Line in Header */
+.exercise-info-line {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-top: 0.25rem;
+  flex-wrap: wrap;
+}
+
+.exercise-info-line .exercise-title-inline {
+  font-size: 0.95rem;
+  opacity: 0.95;
+  font-weight: 500;
+}
+
+.exercise-info-line .exercise-type-badge-inline {
+  font-size: 0.7rem;
+  padding: 0.2rem 0.5rem;
+  border-radius: 4px;
+  font-weight: 600;
+  text-transform: uppercase;
+  background: rgba(255, 255, 255, 0.2);
+  color: white;
 }
 
 /* Modern Section Header - Ultra Compact */
@@ -4586,6 +4932,42 @@ onBeforeUnmount(() => {
   .completion-text {
     font-size: 1rem;
   }
+  
+  /* Section Start Screen Responsive */
+  .section-start-screen {
+    padding: 1rem;
+  }
+  
+  .start-screen-header {
+    padding: 1.5rem 1rem;
+  }
+  
+  .start-screen-title {
+    font-size: 1.35rem;
+  }
+  
+  .section-meta {
+    gap: 1rem;
+  }
+  
+  .start-screen-description,
+  .start-screen-exercises,
+  .start-screen-action {
+    padding: 1rem;
+  }
+  
+  .exercise-list-item {
+    padding: 0.5rem;
+  }
+  
+  .exercise-name {
+    font-size: 0.85rem;
+  }
+  
+  .exercise-type-tag {
+    font-size: 0.65rem;
+    padding: 0.2rem 0.4rem;
+  }
 }
 
 /* Welcome Dialog Styles */
@@ -5059,7 +5441,7 @@ onBeforeUnmount(() => {
   padding: 0.375rem 0.75rem;
   background: rgba(255, 255, 255, 0.2);
   border: 1px solid rgba(255, 255, 255, 0.3);
-  border-radius: 6px;
+  border-radius: 12px;
   color: white;
   font-size: 0.8rem;
   font-weight: 500;

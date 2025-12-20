@@ -178,10 +178,11 @@ export function useExerciseNavigation(options = {}) {
     currentExerciseIndex.value = 0 // Yeni bölümde ilk egzersizden başla
     store.setCurrentSection(sectionId)
     
-    const section = store.sections.find(s => s.section_uuid === sectionId)
-    if (section && onStartTimer) {
-      await onStartTimer(section)
-    }
+    // Timer artık burada başlatılmıyor - Section Start Screen'den başlatılacak
+    // const section = store.sections.find(s => s.section_uuid === sectionId)
+    // if (section && onStartTimer) {
+    //   await onStartTimer(section)
+    // }
   }
   
   // ========================
@@ -376,8 +377,8 @@ export function useExerciseNavigation(options = {}) {
         currentExerciseIndex.value = 0
         if (currentExerciseStartTime) currentExerciseStartTime.value = Date.now()
         
-        // Timer'ı başlat
-        if (onStartTimer) await onStartTimer(nextSection)
+        // Timer artık burada başlatılmıyor - Section Start Screen'den başlatılacak
+        // if (onStartTimer) await onStartTimer(nextSection)
       } else {
         // Tüm bölümler tamamlandı - popup'ı KAPATMADAN yönlendir
         // Böylece yönlendirme sırasında arka plandaki egzersiz ekranı görünmez
